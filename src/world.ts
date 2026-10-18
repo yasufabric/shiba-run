@@ -111,17 +111,29 @@ function buildShiba(): ShibaParts {
   const neck = mesh(new THREE.SphereGeometry(0.2, 16, 12), fur, 0, 0.8, -0.36);
   spin.add(body, chest, belly, rump, neck);
 
+  // 赤い首輪と金の鈴（首の向きに合わせて傾ける）
+  const collar = outline(mesh(new THREE.TorusGeometry(0.2, 0.05, 10, 28), mat(0xd7263d), 0, 0.82, -0.4), 1.12);
+  collar.rotation.x = 0.93;
+  const bell = outline(mesh(new THREE.SphereGeometry(0.06, 12, 10), mat(0xf5c542), 0, 0.68, -0.58), 1.12);
+  spin.add(collar, bell);
+
   // 頭
   const head = new THREE.Group();
   head.position.set(0, 0.98, -0.52);
   const skull = outline(mesh(new THREE.SphereGeometry(0.27, 24, 16), fur, 0, 0, 0));
-  skull.scale.set(1.08, 0.95, 1);
-  const cheekL = mesh(new THREE.SphereGeometry(0.13, 14, 10), cream, -0.11, -0.09, -0.13);
-  const cheekR = mesh(new THREE.SphereGeometry(0.13, 14, 10), cream, 0.11, -0.09, -0.13);
-  const muzzle = mesh(new THREE.SphereGeometry(0.12, 14, 10), cream, 0, -0.07, -0.26);
-  muzzle.scale.set(0.95, 0.75, 1.15);
-  const nose = mesh(new THREE.SphereGeometry(0.045, 10, 8), black, 0, -0.02, -0.39);
-  const mouth = mesh(new THREE.SphereGeometry(0.035, 8, 6), pink, 0, -0.13, -0.33);
+  skull.scale.set(1.08, 0.92, 1);
+  // 横に張った頬の毛（後ろから見たときに頭が丸い玉に見えないように）
+  for (const sx of [-1, 1]) {
+    const ruff = outline(mesh(new THREE.SphereGeometry(0.13, 12, 10), fur, sx * 0.19, -0.09, 0.03));
+    ruff.scale.set(1, 0.85, 1.1);
+    head.add(ruff);
+  }
+  const cheekL = mesh(new THREE.SphereGeometry(0.11, 14, 10), cream, -0.1, -0.1, -0.14);
+  const cheekR = mesh(new THREE.SphereGeometry(0.11, 14, 10), cream, 0.1, -0.1, -0.14);
+  const muzzle = outline(mesh(new THREE.SphereGeometry(0.11, 14, 10), cream, 0, -0.07, -0.28), 1.05);
+  muzzle.scale.set(0.8, 0.68, 1.45);
+  const nose = mesh(new THREE.SphereGeometry(0.045, 10, 8), black, 0, -0.03, -0.43);
+  const mouth = mesh(new THREE.SphereGeometry(0.03, 8, 6), pink, 0, -0.13, -0.36);
   mouth.scale.set(1.2, 0.6, 0.6);
   const eyes: THREE.Mesh[] = [];
   for (const sx of [-1, 1]) {
@@ -137,10 +149,10 @@ function buildShiba(): ShibaParts {
   const ears: THREE.Group[] = [];
   for (const sx of [-1, 1]) {
     const ear = new THREE.Group();
-    ear.position.set(sx * 0.14, 0.2, 0.0);
-    ear.rotation.set(-0.15, 0, -sx * 0.28);
-    const outer = outline(mesh(new THREE.ConeGeometry(0.11, 0.25, 3), fur, 0, 0.1, 0), 1.1);
-    const inner = mesh(new THREE.ConeGeometry(0.065, 0.16, 3), pink, 0, 0.07, -0.035);
+    ear.position.set(sx * 0.14, 0.18, -0.02);
+    ear.rotation.set(-0.35, 0, -sx * 0.32);
+    const outer = outline(mesh(new THREE.ConeGeometry(0.115, 0.22, 3), fur, 0, 0.09, 0), 1.1);
+    const inner = mesh(new THREE.ConeGeometry(0.068, 0.14, 3), pink, 0, 0.06, -0.036);
     ear.add(outer, inner);
     ears.push(ear);
     head.add(ear);
@@ -150,12 +162,13 @@ function buildShiba(): ShibaParts {
 
   // 背中に乗ったくるんと巻いた尾（後ろから見ると輪っか）
   const tail = new THREE.Group();
-  tail.position.set(0, 0.86, 0.36);
-  tail.rotation.x = -0.6;
-  const curl = outline(mesh(new THREE.TorusGeometry(0.12, 0.07, 12, 28), fur, 0, 0.12, 0));
-  const curlInner = mesh(new THREE.SphereGeometry(0.06, 10, 8), cream, 0, 0.12, 0);
-  curlInner.scale.z = 0.5;
-  tail.add(curl, curlInner);
+  tail.position.set(-0.04, 0.86, 0.38);
+  tail.rotation.set(-0.75, 0, 0.35);
+  const curl = outline(mesh(new THREE.TorusGeometry(0.11, 0.075, 12, 28, Math.PI * 1.7), fur, 0, 0.12, 0));
+  curl.rotation.z = -Math.PI / 2;
+  const a = Math.PI * 1.7 - Math.PI / 2;
+  const tip = mesh(new THREE.SphereGeometry(0.07, 10, 8), cream, Math.cos(a) * 0.11, 0.12 + Math.sin(a) * 0.11, 0);
+  tail.add(curl, tip);
   spin.add(tail);
 
   // 足（白いソックス付き）
@@ -446,7 +459,7 @@ export class World {
     });
     s.spin.position.y = running && grounded ? Math.abs(Math.sin(phase)) * 0.06 : 0;
     s.head.rotation.x = running ? Math.sin(phase * 2) * 0.05 : Math.sin(t * 2) * 0.05;
-    s.ears.forEach((ear, i) => (ear.rotation.z = (i === 0 ? 0.28 : -0.28) + Math.sin(t * 9 + i) * (running ? 0.06 : 0.02)));
+    s.ears.forEach((ear, i) => (ear.rotation.z = (i === 0 ? 0.32 : -0.32) + Math.sin(t * 9 + i) * (running ? 0.06 : 0.02)));
     // しっぽはふりふり。走っている間は速く
     s.tail.rotation.z = Math.sin(t * (running ? 14 : 8)) * 0.25;
     // ときどきまばたき
