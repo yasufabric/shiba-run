@@ -128,7 +128,11 @@ export class Game {
 
   speed(): number {
     const base = this.baseSpeed();
-    if (this.boostT > 0) return base * CFG.boostMult;
+    if (this.boostT > 0) {
+      // 急に速度が変わると画面がガクッと見えるので、始まりと終わりはなめらかに加減速する
+      const ramp = Math.min(1, (CFG.boostDuration - this.boostT) / 0.25, this.boostT / 0.6);
+      return base * (1 + (CFG.boostMult - 1) * ramp);
+    }
     let m = 1;
     if (this.stumbleT > 0) m *= CFG.stumbleMult;
     if (this.wetT > 0) m *= CFG.wetMult;
@@ -148,7 +152,7 @@ export class Game {
       boostT: 0, stumbleT: 0, slipT: 0, blindT: 0, wetT: 0, drillT: 0, drillCd: 0,
       things: [], splashes: [], particles: [], popups: [],
       nextRow: 200, nextShot: 3, potatoCd: 4, overT: 0, shake: 0, runSasami: 0,
-      nextShout: 8,
+      nextShout: 12,
     });
     this.say('こら〜！お風呂だよ！', 2.8);
     this.viewSkin = Math.max(0, SKINS.findIndex((s) => s.id === this.save.skin));
@@ -238,6 +242,12 @@ export class Game {
   /** タイトル（柴の着せかえ画面）に戻る */
   private goTitle(): void {
     this.scene = 'title';
+    // 前のプレイのレーンや状態を引きずらないよう、柴を真ん中に戻して場面を片付ける
+    Object.assign(this, {
+      lane: 1, x: laneX(1), z: 0, jumpT: -1, ownerX: laneX(1),
+      boostT: 0, stumbleT: 0, slipT: 0, blindT: 0, wetT: 0, drillT: 0,
+      things: [], splashes: [], particles: [], popups: [], shake: 0, shoutT: 0,
+    });
     this.viewSkin = Math.max(0, SKINS.findIndex((s) => s.id === this.save.skin));
     this.titleMsg = '';
   }
@@ -297,7 +307,7 @@ export class Game {
         ? ['つかまえた〜！…あれ？', 'もうすぐだぞ〜！', 'シャンプーするよ〜！']
         : ['まて〜っ！', '逃げるな〜！', 'シャンプーするだけ！', 'いい子だから〜'];
       this.say(lines[Math.floor(Math.random() * lines.length)]);
-      this.nextShout = rand(6, 10);
+      this.nextShout = rand(10, 16);
     }
     for (const s of this.splashes) {
       if (s.warn > 0) {

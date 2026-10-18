@@ -190,6 +190,9 @@ function drawMuteButton(ctx: Ctx, muted: boolean): void {
   ctx.stroke();
 }
 
+/** 上部のスコア表示の下端（論理座標） */
+const HUD_BOTTOM = 125;
+
 const HINTS: Record<string, string> = {
   bucket: 'バケツ：ぶつかると転ぶ！ジャンプでかわせ',
   soap: '石けん：踏むとツルッと滑る！',
@@ -217,30 +220,30 @@ function label(ctx: Ctx, s: string, x: number, y: number): void {
 
 /** 飼い主の吹き出し。柴にかぶらないよう、飼い主の頭の横（画面の空いている側）に出す */
 function bubble(ctx: Ctx, s: string, x: number, y: number): void {
-  ctx.font = `bold 14px ${FONT}`;
-  const w = Math.min(W * 0.62, ctx.measureText(s).width + 22);
+  ctx.font = `bold 12px ${FONT}`;
+  const w = Math.min(W * 0.55, ctx.measureText(s).width + 18);
   const right = x < W / 2;
   const gap = 34;
   const lx = right ? Math.min(W - 8 - w, x + gap) : Math.max(8, x - gap - w);
-  const top = y - 16;
+  const top = y - 13;
   ctx.fillStyle = '#ffffff';
   ctx.strokeStyle = '#2a3a4a';
   ctx.lineWidth = 2.5;
   ctx.beginPath();
-  ctx.roundRect(lx, top, w, 32, 16);
+  ctx.roundRect(lx, top, w, 26, 13);
   const ex = right ? lx : lx + w;
-  ctx.moveTo(ex, top + 10);
+  ctx.moveTo(ex, top + 8);
   ctx.lineTo(right ? x + 12 : x - 12, y + 4);
-  ctx.lineTo(ex, top + 22);
+  ctx.lineTo(ex, top + 18);
   ctx.fill();
   ctx.stroke();
   // しっぽの付け根の線を消す
-  ctx.fillRect(right ? ex : ex - 4, top + 11, 4, 10);
+  ctx.fillRect(right ? ex : ex - 4, top + 9, 4, 8);
   ctx.save();
   ctx.beginPath();
-  ctx.rect(lx + 6, top, w - 12, 32);
+  ctx.rect(lx + 5, top, w - 10, 26);
   ctx.clip();
-  text(ctx, s, lx + w / 2, top + 16, 14, '#d23c3c', 'center', false);
+  text(ctx, s, lx + w / 2, top + 13, 12, '#d23c3c', 'center', false);
   ctx.restore();
 }
 
@@ -279,13 +282,14 @@ export function drawHudLayer(ctx: Ctx, g: Game, H: number, muted: boolean, proje
     const th = g.things.filter((t) => t.hint && !t.done && t.y < g.shibaY + 30).sort((a, b) => b.y - a.y)[0];
     if (sp) {
       const p = project(sp.wide ? W / 2 : laneX(sp.lane), 60, Math.min(sp.y, g.ownerY - 40));
-      label(ctx, HINTS[sp.wide ? 'wave' : 'splash'], p.x, p.y);
+      if (p.y > HUD_BOTTOM) label(ctx, HINTS[sp.wide ? 'wave' : 'splash'], p.x, p.y);
     } else if (th) {
       const p = project(laneX(th.lane), 70, th.y);
-      label(ctx, HINTS[th.kind], p.x, p.y);
+      // 遠くてスコア表示の裏に隠れる位置にいるうちは出さない
+      if (p.y > HUD_BOTTOM) label(ctx, HINTS[th.kind], p.x, p.y);
     }
     if (g.shoutT > 0) {
-      const p = project(g.ownerX, 105, g.ownerY);
+      const p = project(g.ownerX, 80, g.ownerY);
       bubble(ctx, g.shout, p.x, Math.min(p.y, H - 40));
     }
     // 最初に目的をはっきり見せる

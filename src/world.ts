@@ -15,7 +15,7 @@ const MAX_PARTICLES = 400;
 const MAX_SPRAY = 120;
 /** 柴の表示倍率（当たり判定はゲームロジック側なので見た目だけ） */
 const SHIBA_SCALE = 1.35;
-const OWNER_SCALE = 1.15;
+const OWNER_SCALE = 0.85;
 
 const mat = (color: THREE.ColorRepresentation, extra: THREE.MeshToonMaterialParameters = {}) =>
   new THREE.MeshToonMaterial({ color, ...extra });
@@ -520,6 +520,15 @@ export class World {
   private owner = buildOwner();
   private things = new Map<Thing, THREE.Group>();
   private splashes = new Map<Splash, THREE.Group>();
+  /**
+   * 障害物などは種類ごとに1つだけ作って使い回す（毎回ジオメトリやテクスチャを作ると
+   * GPUへの転送でカクつくため）。使い終わったものはプールに戻す
+   */
+  private protos = new Map<string, THREE.Group>();
+  private pool = new Map<string, THREE.Group[]>();
+  /** 起動直後に全種類を一度描画してシェーダーを先にコンパイルしておく */
+  private warmup: THREE.Group | null = new THREE.Group();
+  private boostBlend = 0;
   private particles: THREE.InstancedMesh;
   private tmp = new THREE.Object3D();
   private tmpColor = new THREE.Color();
@@ -581,6 +590,20 @@ export class World {
     this.particles.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.particles.frustumCulled = false;
     this.scene.add(this.particles);
+    // 色つきインスタンスを最初から有効にしておく（初回の破片でシェーダーが再コンパイルされないように）
+    this.particles.setColorAt(0, new THREE.Color(0xffffff));
+
+    const kinds = ['bucket', 'soap', 'towel', 'potato', 'sasami', 'splash', 'wave'];
+    kinds.forEach((k, i) => {
+      const o = this.acquire(k);
+      o.position.set((i - 3) * 0.8, 0, -3);
+      o.userData.kind = k;
+      o.traverse((c) => (c.visible = true));
+      this.warmup!.add(o);
+    });
+    // 床の下に置いて見えないまま一度だけ描画させる
+    this.warmup!.position.y = -4;
+    this.scene.add(this.warmup!);
   }
 
   resize(width: number, height: number, dpr: number): void {
@@ -624,7 +647,8 @@ export class World {
     this.titleBlend += ((g.scene === 'title' ? 1 : 0) - this.titleBlend) * Math.min(1, dt * 3);
     const k = this.titleBlend;
     const shake = g.shake > 0 ? g.shake * 0.4 : 0;
-    const boostPull = g.boostT > 0 ? 0.8 : 0;
+    this.boostBlend += ((g.boostT > 0.3 ? 1 : 0) - this.boostBlend) * Math.min(1, dt * 3);
+    const boostPull = this.boostBlend * 0.8;
     this.camera.position.set(
       wx(g.x) * 0.35 + (Math.random() - 0.5) * shake,
       THREE.MathUtils.lerp(10.5, 3.3, k) + (Math.random() - 0.5) * shake,
@@ -632,6 +656,16 @@ export class World {
     );
     this.camera.lookAt(wx(g.x) * 0.25, THREE.MathUtils.lerp(0, 0.9, k), THREE.MathUtils.lerp(-5, -1.4, k));
     this.renderer.render(this.scene, this.camera);
+    if (this.warmup) {
+      // 一度描画できたら（シェーダーのコンパイルが済んだら）プールに戻す
+      for (const o of [...this.warmup.children] as THREE.Group[]) {
+        this.warmup.remove(o);
+        o.position.set(0, 0, 0);
+        this.release(o.userData.kind as string, o);
+      }
+      this.scene.remove(this.warmup);
+      this.warmup = null;
+    }
   }
 
   private updateShiba(g: Game, t: number): void {
@@ -700,7 +734,7 @@ export class World {
   private updateOwner(g: Game, t: number, dt: number): void {
     const o = this.owner;
     o.root.visible = g.scene !== 'title';
-    let sprayRate = 25;
+    let sprayRate = 12;
     if (g.scene === 'over') {
       // 捕まえたら柴の横に立ってシャワーを浴びせる（柴が隠れないように）
       const side = g.x > W / 2 ? -1 : 1;
@@ -720,7 +754,7 @@ export class World {
       o.armR.rotation.x = 1.35 + Math.sin(t * 14) * 0.08;
       const aiming = g.ownerAim > 0;
       o.showerMat.emissive.setRGB(aiming ? 0.6 : 0, aiming ? 0.8 : 0, aiming ? 1 : 0);
-      if (aiming) sprayRate = 90;
+      if (aiming) sprayRate = 45;
     }
     this.updateSpray(o.root.visible ? sprayRate : 0, dt, g.scene === 'over' ? 0.45 : 1);
   }
@@ -762,18 +796,37 @@ export class World {
     return d;
   }
 
+  /** プールから取り出す（なければ見本を複製。ジオメトリとマテリアルは共有される） */
+  private acquire(kind: string): THREE.Group {
+    const free = this.pool.get(kind)?.pop();
+    if (free) return free;
+    let proto = this.protos.get(kind);
+    if (!proto) {
+      proto = kind === 'splash' || kind === 'wave' ? buildSplash(kind === 'wave') : buildThing(kind as Thing['kind']);
+      this.protos.set(kind, proto);
+    }
+    return proto.clone(true);
+  }
+
+  private release(kind: string, obj: THREE.Group): void {
+    this.scene.remove(obj);
+    const list = this.pool.get(kind) ?? [];
+    list.push(obj);
+    this.pool.set(kind, list);
+  }
+
   private syncThings(g: Game, t: number): void {
     const alive = new Set(g.things);
     for (const [thing, obj] of this.things) {
       if (!alive.has(thing)) {
-        this.scene.remove(obj);
+        this.release(thing.kind, obj);
         this.things.delete(thing);
       }
     }
     for (const thing of g.things) {
       let obj = this.things.get(thing);
       if (!obj) {
-        obj = buildThing(thing.kind);
+        obj = this.acquire(thing.kind);
         this.things.set(thing, obj);
         this.scene.add(obj);
       }
@@ -796,14 +849,14 @@ export class World {
     const alive = new Set(g.splashes);
     for (const [s, obj] of this.splashes) {
       if (!alive.has(s)) {
-        this.scene.remove(obj);
+        this.release(s.wide ? 'wave' : 'splash', obj);
         this.splashes.delete(s);
       }
     }
     for (const s of g.splashes) {
       let obj = this.splashes.get(s);
       if (!obj) {
-        obj = buildSplash(s.wide);
+        obj = this.acquire(s.wide ? 'wave' : 'splash');
         this.splashes.set(s, obj);
         this.scene.add(obj);
       }
