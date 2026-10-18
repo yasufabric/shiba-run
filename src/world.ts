@@ -15,7 +15,7 @@ const MAX_PARTICLES = 400;
 const MAX_SPRAY = 120;
 /** 柴の表示倍率（当たり判定はゲームロジック側なので見た目だけ） */
 const SHIBA_SCALE = 1.35;
-const OWNER_SCALE = 1.15;
+const OWNER_SCALE = 0.85;
 
 const mat = (color: THREE.ColorRepresentation, extra: THREE.MeshToonMaterialParameters = {}) =>
   new THREE.MeshToonMaterial({ color, ...extra });
@@ -700,7 +700,7 @@ export class World {
   private updateOwner(g: Game, t: number, dt: number): void {
     const o = this.owner;
     o.root.visible = g.scene !== 'title';
-    let sprayRate = 25;
+    let sprayRate = 12;
     if (g.scene === 'over') {
       // 捕まえたら柴の横に立ってシャワーを浴びせる（柴が隠れないように）
       const side = g.x > W / 2 ? -1 : 1;
@@ -720,7 +720,7 @@ export class World {
       o.armR.rotation.x = 1.35 + Math.sin(t * 14) * 0.08;
       const aiming = g.ownerAim > 0;
       o.showerMat.emissive.setRGB(aiming ? 0.6 : 0, aiming ? 0.8 : 0, aiming ? 1 : 0);
-      if (aiming) sprayRate = 90;
+      if (aiming) sprayRate = 45;
     }
     this.updateSpray(o.root.visible ? sprayRate : 0, dt, g.scene === 'over' ? 0.45 : 1);
   }
