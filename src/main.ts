@@ -76,7 +76,7 @@ function frame(now: number): void {
   game.sounds.length = 0;
   if (game.scene === 'playing') {
     if (!wasPlaying) sound.startBgm();
-    sound.tempo = 140 + Math.min(40, game.time * 0.4); // 走るほど曲も速くなる
+    sound.tempo = 132 + Math.min(32, game.time * 0.3); // 走るほど曲も速くなる
   } else if (game.scene === 'over') {
     sound.stopBgm();
   }

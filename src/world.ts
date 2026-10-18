@@ -12,8 +12,6 @@ const TILE = 0.95;
 const FLOOR_W = 6.2;
 const FLOOR_L = 80;
 const MAX_PARTICLES = 400;
-/** カメラを少し右に振って柴を斜め後ろから見る（真後ろだと犬の形がわかりにくい） */
-const CAM_SIDE = 0.9;
 /** 柴の表示倍率（当たり判定はゲームロジック側なので見た目だけ） */
 const SHIBA_SCALE = 1.35;
 
@@ -503,11 +501,11 @@ export class World {
     const shake = g.shake > 0 ? g.shake * 0.4 : 0;
     const boostPull = g.boostT > 0 ? 0.8 : 0;
     this.camera.position.set(
-      wx(g.x) * 0.35 + THREE.MathUtils.lerp(CAM_SIDE, 0, k) + (Math.random() - 0.5) * shake,
+      wx(g.x) * 0.35 + (Math.random() - 0.5) * shake,
       THREE.MathUtils.lerp(10.5, 3.3, k) + (Math.random() - 0.5) * shake,
       THREE.MathUtils.lerp(8.5 + boostPull, 4.8, k),
     );
-    this.camera.lookAt(wx(g.x) * 0.25 + THREE.MathUtils.lerp(CAM_SIDE * 0.3, 0, k), THREE.MathUtils.lerp(0, 0.9, k), THREE.MathUtils.lerp(-5, -1.4, k));
+    this.camera.lookAt(wx(g.x) * 0.25, THREE.MathUtils.lerp(0, 0.9, k), THREE.MathUtils.lerp(-5, -1.4, k));
     this.renderer.render(this.scene, this.camera);
   }
 
