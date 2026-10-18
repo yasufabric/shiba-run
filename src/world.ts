@@ -66,52 +66,116 @@ function blobShadow(r: number): THREE.Mesh {
 interface ShibaParts {
   root: THREE.Group;
   spin: THREE.Group;
-  legs: THREE.Mesh[];
+  /** 前足2本・後ろ足2本（付け根が回転軸） */
+  legs: THREE.Group[];
+  head: THREE.Group;
+  ears: THREE.Group[];
+  tail: THREE.Group;
+  eyes: THREE.Mesh[];
   shadow: THREE.Mesh;
   towel: THREE.Mesh;
   ring: THREE.Mesh;
   furMats: THREE.MeshToonMaterial[];
 }
 
+const OUTLINE = new THREE.MeshBasicMaterial({ color: 0x4a2a14, side: THREE.BackSide });
+
+/** 裏面だけを少し大きく描いて、トゥーン調の輪郭線をつける */
+function outline(m: THREE.Mesh, thickness = 1.07): THREE.Mesh {
+  const o = new THREE.Mesh(m.geometry, OUTLINE);
+  o.scale.setScalar(thickness);
+  m.add(o);
+  return m;
+}
+
 function buildShiba(): ShibaParts {
   const root = new THREE.Group();
   const spin = new THREE.Group();
   root.add(spin);
-  const fur = mat(0xe8913f);
-  const furDark = mat(0xc8742a);
-  const cream = mat(0xfff1dc);
-  const black = mat(0x2a1d16);
+  const fur = mat(0xdc8433); // 赤柴
+  const furDark = mat(0xc06d25);
+  const cream = mat(0xfff4e2); // 裏白
+  const black = mat(0x231815);
+  const pink = mat(0xf2a7a0);
+  const white = new THREE.MeshBasicMaterial({ color: 0xffffff });
 
-  const body = mesh(new THREE.SphereGeometry(0.32, 20, 14), fur, 0, 0.55, 0);
-  body.scale.set(1, 0.85, 1.5);
-  const belly = mesh(new THREE.SphereGeometry(0.26, 16, 10), cream, 0, 0.45, -0.1);
-  belly.scale.set(0.9, 0.7, 1.3);
-  const head = mesh(new THREE.SphereGeometry(0.3, 20, 14), fur, 0, 0.9, -0.55);
-  const cheeks = mesh(new THREE.SphereGeometry(0.22, 16, 10), cream, 0, 0.82, -0.68);
-  cheeks.scale.set(1.2, 0.8, 1);
-  const snout = mesh(new THREE.SphereGeometry(0.13, 12, 8), cream, 0, 0.84, -0.86);
-  const nose = mesh(new THREE.SphereGeometry(0.05, 8, 6), black, 0, 0.88, -0.98);
-  const earGeo = new THREE.ConeGeometry(0.1, 0.24, 4);
-  const earL = mesh(earGeo, fur, -0.16, 1.18, -0.5);
-  const earR = mesh(earGeo, fur, 0.16, 1.18, -0.5);
-  earL.rotation.z = 0.25;
-  earR.rotation.z = -0.25;
-  const tail = mesh(new THREE.TorusGeometry(0.13, 0.065, 10, 20), fur, 0, 0.88, 0.48);
-  const tailTip = mesh(new THREE.SphereGeometry(0.07, 8, 6), cream, 0, 0.88, 0.5);
-  spin.add(body, belly, head, cheeks, snout, nose, earL, earR, tail, tailTip);
+  // 胴体と裏白（胸・お腹・お尻）
+  const body = outline(mesh(new THREE.SphereGeometry(0.3, 24, 16), fur, 0, 0.56, 0.05));
+  body.scale.set(0.95, 0.88, 1.55);
+  const chest = mesh(new THREE.SphereGeometry(0.22, 16, 12), cream, 0, 0.55, -0.33);
+  chest.scale.set(1, 1.1, 0.8);
+  const belly = mesh(new THREE.SphereGeometry(0.25, 16, 10), cream, 0, 0.43, 0.05);
+  belly.scale.set(0.82, 0.6, 1.3);
+  const rump = mesh(new THREE.SphereGeometry(0.15, 14, 10), cream, 0, 0.5, 0.48);
+  rump.scale.set(1, 1.05, 0.4);
+  const neck = mesh(new THREE.SphereGeometry(0.2, 16, 12), fur, 0, 0.8, -0.36);
+  spin.add(body, chest, belly, rump, neck);
 
-  const legs: THREE.Mesh[] = [];
-  const legGeo = new THREE.CylinderGeometry(0.07, 0.06, 0.4, 8);
-  legGeo.translate(0, -0.2, 0); // 付け根を回転軸にする
-  for (const [x, z] of [[-0.17, -0.3], [0.17, -0.3], [-0.17, 0.3], [0.17, 0.3]]) {
-    const leg = mesh(legGeo, furDark, x, 0.42, z);
+  // 頭
+  const head = new THREE.Group();
+  head.position.set(0, 0.98, -0.52);
+  const skull = outline(mesh(new THREE.SphereGeometry(0.27, 24, 16), fur, 0, 0, 0));
+  skull.scale.set(1.08, 0.95, 1);
+  const cheekL = mesh(new THREE.SphereGeometry(0.13, 14, 10), cream, -0.11, -0.09, -0.13);
+  const cheekR = mesh(new THREE.SphereGeometry(0.13, 14, 10), cream, 0.11, -0.09, -0.13);
+  const muzzle = mesh(new THREE.SphereGeometry(0.12, 14, 10), cream, 0, -0.07, -0.26);
+  muzzle.scale.set(0.95, 0.75, 1.15);
+  const nose = mesh(new THREE.SphereGeometry(0.045, 10, 8), black, 0, -0.02, -0.39);
+  const mouth = mesh(new THREE.SphereGeometry(0.035, 8, 6), pink, 0, -0.13, -0.33);
+  mouth.scale.set(1.2, 0.6, 0.6);
+  const eyes: THREE.Mesh[] = [];
+  for (const sx of [-1, 1]) {
+    const eye = mesh(new THREE.SphereGeometry(0.042, 10, 8), black, sx * 0.11, 0.05, -0.23);
+    eye.add(mesh(new THREE.SphereGeometry(0.014, 6, 4), white, 0.012, 0.016, -0.034));
+    eyes.push(eye);
+    // 麻呂眉
+    const brow = mesh(new THREE.SphereGeometry(0.035, 8, 6), cream, sx * 0.1, 0.13, -0.22);
+    brow.scale.set(1.3, 0.7, 0.6);
+    head.add(eye, brow);
+  }
+  // 三角の立ち耳（3角錐の平らな面が前を向く）
+  const ears: THREE.Group[] = [];
+  for (const sx of [-1, 1]) {
+    const ear = new THREE.Group();
+    ear.position.set(sx * 0.14, 0.2, 0.0);
+    ear.rotation.set(-0.15, 0, -sx * 0.28);
+    const outer = outline(mesh(new THREE.ConeGeometry(0.11, 0.25, 3), fur, 0, 0.1, 0), 1.1);
+    const inner = mesh(new THREE.ConeGeometry(0.065, 0.16, 3), pink, 0, 0.07, -0.035);
+    ear.add(outer, inner);
+    ears.push(ear);
+    head.add(ear);
+  }
+  head.add(skull, cheekL, cheekR, muzzle, nose, mouth);
+  spin.add(head);
+
+  // 背中に乗ったくるんと巻いた尾（後ろから見ると輪っか）
+  const tail = new THREE.Group();
+  tail.position.set(0, 0.86, 0.36);
+  tail.rotation.x = -0.6;
+  const curl = outline(mesh(new THREE.TorusGeometry(0.12, 0.07, 12, 28), fur, 0, 0.12, 0));
+  const curlInner = mesh(new THREE.SphereGeometry(0.06, 10, 8), cream, 0, 0.12, 0);
+  curlInner.scale.z = 0.5;
+  tail.add(curl, curlInner);
+  spin.add(tail);
+
+  // 足（白いソックス付き）
+  const legs: THREE.Group[] = [];
+  const upperGeo = new THREE.CylinderGeometry(0.075, 0.065, 0.28, 10).translate(0, -0.14, 0);
+  const pawGeo = new THREE.SphereGeometry(0.075, 10, 8);
+  for (const [x, z] of [[-0.16, -0.3], [0.16, -0.3], [-0.16, 0.32], [0.16, 0.32]]) {
+    const leg = new THREE.Group();
+    leg.position.set(x, 0.42, z);
+    const upper = mesh(upperGeo, furDark, 0, 0, 0);
+    const paw = mesh(pawGeo, cream, 0, -0.32, -0.02);
+    paw.scale.set(1, 0.75, 1.25);
+    leg.add(outline(upper, 1.12), paw);
     legs.push(leg);
     spin.add(leg);
   }
 
-  const towel = mesh(new THREE.BoxGeometry(0.75, 0.12, 0.6), mat(0xffffff, { map: stripeTexture() }), 0, 1.1, -0.6);
+  const towel = mesh(new THREE.BoxGeometry(0.75, 0.12, 0.6), mat(0xffffff, { map: stripeTexture() }), 0, 0.28, 0);
   towel.visible = false;
-  spin.add(towel);
+  head.add(towel);
 
   const ring = mesh(
     new THREE.TorusGeometry(0.8, 0.06, 8, 32, Math.PI * 1.4),
@@ -123,7 +187,7 @@ function buildShiba(): ShibaParts {
   root.add(ring);
 
   const shadow = blobShadow(0.45);
-  return { root, spin, legs, shadow, towel, ring, furMats: [fur, furDark] };
+  return { root, spin, legs, head, ears, tail, eyes, shadow, towel, ring, furMats: [fur, furDark] };
 }
 
 interface OwnerParts {
@@ -269,6 +333,8 @@ export class World {
   private tmpVec = new THREE.Vector3();
   private width = 1;
   private height = 1;
+  private lastT = 0;
+  private titleBlend = 1;
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -343,15 +409,20 @@ export class World {
     this.syncSplashes(g, t);
     this.updateParticles(g.particles);
 
-    // カメラ: 柴の後ろ上方から見下ろす（前方の見通し優先）。左右は少しだけ追従
+    // カメラ: プレイ中は柴の後ろ上方から見下ろす（前方の見通し優先）。左右は少しだけ追従
+    // タイトルでは柴の顔が見えるように寄る
+    const dt = Math.min(0.1, t - this.lastT);
+    this.lastT = t;
+    this.titleBlend += ((g.scene === 'title' ? 1 : 0) - this.titleBlend) * Math.min(1, dt * 3);
+    const k = this.titleBlend;
     const shake = g.shake > 0 ? g.shake * 0.4 : 0;
     const boostPull = g.boostT > 0 ? 0.8 : 0;
     this.camera.position.set(
       wx(g.x) * 0.35 + (Math.random() - 0.5) * shake,
-      10.5 + (Math.random() - 0.5) * shake,
-      8.5 + boostPull,
+      THREE.MathUtils.lerp(10.5, 2.6, k) + (Math.random() - 0.5) * shake,
+      THREE.MathUtils.lerp(8.5 + boostPull, 3.6, k),
     );
-    this.camera.lookAt(wx(g.x) * 0.25, 0, -5);
+    this.camera.lookAt(wx(g.x) * 0.25, THREE.MathUtils.lerp(0, 0.9, k), THREE.MathUtils.lerp(-5, -1.2, k));
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -364,11 +435,23 @@ export class World {
     s.shadow.scale.setScalar(1 - y * 0.25);
 
     const running = g.scene === 'playing';
-    const phase = running ? g.runPhase : t * 2;
+    const grounded = g.z === 0;
+    const phase = g.runPhase;
+    // ギャロップ: 前足ペアと後ろ足ペアが交互に動く
     s.legs.forEach((leg, i) => {
-      leg.rotation.x = running && g.z === 0 ? Math.sin(phase + (i % 2 === 0 ? 0 : Math.PI) + (i >= 2 ? Math.PI : 0)) * 0.7 : g.z > 0 ? (i < 2 ? -0.8 : 0.8) : 0;
+      const front = i < 2;
+      if (!running) leg.rotation.x = 0;
+      else if (!grounded) leg.rotation.x = front ? -0.9 : 0.9;
+      else leg.rotation.x = Math.sin(phase + (front ? 0 : Math.PI) + (i % 2) * 0.4) * 0.75;
     });
-    s.spin.position.y = running && g.z === 0 ? Math.abs(Math.sin(phase)) * 0.06 : 0;
+    s.spin.position.y = running && grounded ? Math.abs(Math.sin(phase)) * 0.06 : 0;
+    s.head.rotation.x = running ? Math.sin(phase * 2) * 0.05 : Math.sin(t * 2) * 0.05;
+    s.ears.forEach((ear, i) => (ear.rotation.z = (i === 0 ? 0.28 : -0.28) + Math.sin(t * 9 + i) * (running ? 0.06 : 0.02)));
+    // しっぽはふりふり。走っている間は速く
+    s.tail.rotation.z = Math.sin(t * (running ? 14 : 8)) * 0.25;
+    // ときどきまばたき
+    const blink = t % 3.2 < 0.12 ? 0.15 : 1;
+    s.eyes.forEach((e) => (e.scale.y = blink));
 
     let rotY = 0;
     let rotZ = 0;
@@ -377,7 +460,15 @@ export class World {
     if (g.stumbleT > 0) rotZ = Math.sin(g.stumbleT * 40) * 0.3;
     // レーン移動中は進行方向に少し体を傾ける
     rotZ += (laneX(g.lane) - g.x) * -0.004;
-    if (g.scene === 'over') rotZ = 0.2 * Math.sin(t * 20);
+    if (g.scene === 'title') {
+      // タイトルではこっちを向いておすわり気味にゆらゆら
+      rotY = Math.PI + Math.sin(t * 1.5) * 0.25;
+      rotZ = 0;
+    } else if (g.scene === 'over') {
+      // 捕まったら振り向いてブルブル
+      rotY = Math.PI;
+      rotZ = 0.15 * Math.sin(t * 30);
+    }
     s.spin.rotation.set(0, rotY, rotZ);
 
     s.ring.visible = g.drillT > 0;
@@ -387,13 +478,23 @@ export class World {
     const glow = g.boostT > 0 ? 0.35 + 0.15 * Math.sin(t * 20) : 0;
     for (const m of s.furMats) {
       m.emissive.setRGB(glow, glow * 0.6, 0);
-      if (g.wetT > 0) m.emissive.setRGB(0, 0.08, 0.25);
+      if (g.wetT > 0 || g.scene === 'over') m.emissive.setRGB(0, 0.08, 0.25);
     }
   }
 
   private updateOwner(g: Game, t: number): void {
     const o = this.owner;
     o.root.visible = g.scene !== 'title';
+    if (g.scene === 'over') {
+      // 捕まえたら柴の横に立ってシャワーを向ける（柴が隠れないように）
+      const side = g.x > W / 2 ? -1 : 1;
+      o.root.position.set(wx(g.x) + side * 1.0, 0, 0.2);
+      o.root.rotation.y = side * Math.PI / 2;
+      o.legs.forEach((leg) => (leg.rotation.x = 0));
+      o.showerMat.emissive.setRGB(0.6, 0.8, 1);
+      return;
+    }
+    o.root.rotation.y = 0;
     o.root.position.set(wx(g.ownerX), Math.abs(Math.sin(t * 7)) * 0.08, wz(g.ownerY));
     o.legs.forEach((leg, i) => (leg.rotation.x = Math.sin(t * 14 + i * Math.PI) * 0.6));
     o.showerMat.emissive.setRGB(g.ownerAim > 0 ? 0.6 : 0, g.ownerAim > 0 ? 0.8 : 0, g.ownerAim > 0 ? 1 : 0);

@@ -1,4 +1,5 @@
 import { CFG, LANES, OWNER_OFFSET, OWNER_SPAN, SHIBA_Y, SPAWN_Y, W, laneX } from './config';
+import type { Sfx } from './audio';
 import type { Action } from './input';
 
 export type ObstacleKind = 'bucket' | 'soap' | 'towel';
@@ -82,6 +83,8 @@ export class Game {
   potatoCd = 0;
   overT = 0;
   shake = 0;
+  /** このフレームで鳴らす効果音（main 側で取り出して再生する） */
+  sounds: Sfx[] = [];
 
   get shibaY(): number { return SHIBA_Y; }
   get ownerY(): number {
@@ -117,6 +120,7 @@ export class Game {
       things: [], splashes: [], particles: [], popups: [],
       nextRow: 200, nextShot: 3, potatoCd: 4, overT: 0, shake: 0,
     });
+    this.sounds.push('start');
   }
 
   handle(a: Action): void {
@@ -136,13 +140,17 @@ export class Game {
         break;
       case 'jump':
       case 'tap':
-        if (this.jumpT < 0) this.jumpT = 0;
+        if (this.jumpT < 0) {
+          this.jumpT = 0;
+          this.sounds.push('jump');
+        }
         break;
       case 'drill':
         if (this.drillCd <= 0) {
           this.drillT = CFG.drillDuration;
           this.drillCd = CFG.drillCooldown;
           this.wetT = 0; // ブルブルで水を切る
+          this.sounds.push('drill');
           this.burst(this.x, this.shibaY, 14, '#9fd8ff', 160);
         }
         break;
@@ -245,18 +253,21 @@ export class Game {
         t.done = true;
         this.bonus += CFG.sasamiBonus;
         this.popup(`+${CFG.sasamiBonus}`, '#ff8fa3');
+        this.sounds.push('sasami');
         this.burst(this.x, sy, 8, '#ffd0d8', 120);
       } else if (t.kind === 'potato') {
         t.done = true;
         this.boostT = CFG.boostDuration;
         this.stumbleT = this.wetT = this.slipT = this.blindT = 0;
         this.popup('おいも ダッシュ!', '#b35cff');
+        this.sounds.push('potato');
         this.burst(this.x, sy, 12, '#ffd166', 180);
       } else if (isObstacle(t.kind)) {
         if (this.z > CLEAR_HEIGHT[t.kind]) continue;
         t.done = true;
         if (this.boostT > 0) {
           this.popup('ドーン!', '#ffb703');
+          this.sounds.push('smash');
           this.burst(laneX(t.lane), t.y, 10, '#ffffff', 220);
           this.bonus += 20;
           continue;
@@ -271,6 +282,7 @@ export class Game {
       if (this.drillT > 0 && inLane && Math.abs(s.y - sy) < CFG.drillRadius) {
         s.done = true;
         this.popup('はじいた!', '#3fa7ff');
+        this.sounds.push('deflect');
         this.burst(s.wide ? W / 2 : laneX(s.lane), s.y, s.wide ? 24 : 12, '#7cc8ff', 260);
         this.bonus += 30;
         continue;
@@ -282,6 +294,7 @@ export class Game {
         this.gap -= CFG.splashPenalty;
         this.shake = 0.25;
         this.popup('ビショッ!', '#3fa7ff');
+        this.sounds.push('wet');
         this.burst(this.x, sy, 16, '#7cc8ff', 200);
       }
     }
@@ -294,6 +307,7 @@ export class Game {
         this.gap -= CFG.bucketPenalty;
         this.shake = 0.3;
         this.popup('ガシャン!', '#ff5a5f');
+        this.sounds.push('bucket');
         this.burst(this.x, this.shibaY, 10, '#4f86c6', 200);
         break;
       case 'soap': {
@@ -302,12 +316,14 @@ export class Game {
         this.slipDir = dirs[Math.floor(Math.random() * dirs.length)];
         this.lane += this.slipDir;
         this.popup('ツルッ!', '#ff7eb6');
+        this.sounds.push('slip');
         this.burst(this.x, this.shibaY, 10, '#ffffff', 140);
         break;
       }
       case 'towel':
         this.blindT = CFG.blindDuration;
         this.popup('モフッ! 前が見えない', '#c9a227');
+        this.sounds.push('towel');
         break;
     }
   }
@@ -317,7 +333,9 @@ export class Game {
     this.scene = 'over';
     this.overT = 0;
     this.shake = 0.4;
+    this.sounds.push('gameover');
     this.burst(this.x, this.shibaY, 30, '#9fd8ff', 260);
+    this.burst(this.x, this.shibaY, 20, '#ffffff', 160); // シャンプーの泡
     if (this.score > this.best) {
       this.best = this.score;
       this.newBest = true;
