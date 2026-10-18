@@ -12,6 +12,10 @@ const TILE = 0.95;
 const FLOOR_W = 6.2;
 const FLOOR_L = 80;
 const MAX_PARTICLES = 400;
+/** カメラを少し右に振って柴を斜め後ろから見る（真後ろだと犬の形がわかりにくい） */
+const CAM_SIDE = 0.9;
+/** 柴の表示倍率（当たり判定はゲームロジック側なので見た目だけ） */
+const SHIBA_SCALE = 1.35;
 
 const mat = (color: THREE.ColorRepresentation, extra: THREE.MeshToonMaterialParameters = {}) =>
   new THREE.MeshToonMaterial({ color, ...extra });
@@ -90,6 +94,7 @@ function outline(m: THREE.Mesh, thickness = 1.07): THREE.Mesh {
 
 function buildShiba(): ShibaParts {
   const root = new THREE.Group();
+  root.scale.setScalar(SHIBA_SCALE);
   const spin = new THREE.Group();
   root.add(spin);
   const fur = mat(0xdc8433); // 赤柴
@@ -99,35 +104,40 @@ function buildShiba(): ShibaParts {
   const pink = mat(0xf2a7a0);
   const white = new THREE.MeshBasicMaterial({ color: 0xffffff });
 
-  // 胴体と裏白（胸・お腹・お尻）
-  const body = outline(mesh(new THREE.SphereGeometry(0.3, 24, 16), fur, 0, 0.56, 0.05));
-  body.scale.set(1, 0.88, 1.55);
-  const chest = mesh(new THREE.SphereGeometry(0.2, 16, 12), cream, 0, 0.55, -0.38);
-  chest.scale.set(0.85, 1.1, 0.8);
-  const belly = mesh(new THREE.SphereGeometry(0.25, 16, 10), cream, 0, 0.43, 0.05);
-  belly.scale.set(0.82, 0.6, 1.3);
-  const rump = mesh(new THREE.SphereGeometry(0.15, 14, 10), cream, 0, 0.5, 0.48);
+  // 胴体: 横長のカプセルで背中のラインを作る（上から見て犬らしい長さが出るように）
+  const body = outline(mesh(new THREE.CapsuleGeometry(0.24, 0.5, 8, 18).rotateX(Math.PI / 2), fur, 0, 0.56, 0.04));
+  body.scale.set(1.05, 0.95, 1);
+  // 肩まわり（胴から首へのつなぎ）
+  const shoulder = mesh(new THREE.SphereGeometry(0.25, 18, 14), fur, 0, 0.62, -0.3);
+  // 裏白（胸・お腹・お尻）
+  const chest = mesh(new THREE.SphereGeometry(0.17, 16, 12), cream, 0, 0.55, -0.47);
+  chest.scale.set(0.9, 1.05, 0.6);
+  const belly = mesh(new THREE.SphereGeometry(0.2, 16, 10), cream, 0, 0.41, 0.02);
+  belly.scale.set(0.9, 0.55, 1.7);
+  const rump = mesh(new THREE.SphereGeometry(0.13, 14, 10), cream, 0, 0.5, 0.53);
   rump.scale.set(1, 1.05, 0.4);
-  // 肩から頭へなだらかにつながる太めの首（くびれて見えないように）
-  const neck = mesh(new THREE.SphereGeometry(0.25, 18, 14), fur, 0, 0.69, -0.3);
-  neck.scale.set(1, 1, 1.2);
-  spin.add(body, chest, belly, rump, neck);
+  // 首: 前に傾いたカプセルで肩から頭へなだらかにつなぐ
+  const neck = mesh(new THREE.CapsuleGeometry(0.19, 0.18, 6, 14), fur, 0, 0.72, -0.52);
+  neck.rotation.x = -1.0;
+  for (const sx of [-1, 1]) {
+    const haunch = outline(mesh(new THREE.SphereGeometry(0.16, 14, 10), fur, sx * 0.15, 0.5, 0.33), 1.06);
+    haunch.scale.set(0.9, 1.1, 1.2);
+    // 太ももの後ろ側の白い毛
+    const pants = mesh(new THREE.SphereGeometry(0.11, 12, 10), cream, sx * 0.12, 0.43, 0.47);
+    pants.scale.set(0.9, 1.1, 0.6);
+    spin.add(haunch, pants);
+  }
+  spin.add(body, shoulder, chest, belly, rump, neck);
 
-  // 赤い首輪と金の鈴（首の向きに合わせて傾け、首に沿うサイズに）
-  const collar = outline(mesh(new THREE.TorusGeometry(0.235, 0.045, 10, 32), mat(0xd7263d), 0, 0.81, -0.4), 1.1);
-  collar.rotation.x = 0.93;
-  collar.scale.set(1, 0.9, 1);
-  const bell = outline(mesh(new THREE.SphereGeometry(0.055, 12, 10), mat(0xf5c542), 0, 0.65, -0.6), 1.12);
-  spin.add(collar, bell);
-
-  // 頭
+  // 頭: 走る犬のように低め・前寄りに置いて、後ろから見ても胴の上に乗った玉に見えないようにする
   const head = new THREE.Group();
-  head.position.set(0, 0.98, -0.52);
-  const skull = outline(mesh(new THREE.SphereGeometry(0.27, 24, 16), fur, 0, 0, 0));
-  skull.scale.set(1.02, 0.92, 1);
+  head.position.set(0, 0.86, -0.8);
+  const skull = outline(mesh(new THREE.SphereGeometry(0.25, 24, 16), fur, 0, 0, 0));
+  skull.scale.set(1.02, 0.92, 1.05);
   // 横に張った頬の毛（後ろから見たときに頭が丸い玉に見えないように）
   for (const sx of [-1, 1]) {
-    const ruff = outline(mesh(new THREE.SphereGeometry(0.12, 12, 10), fur, sx * 0.16, -0.1, 0.02));
+    // 頬の裏白は後ろから見ても白く見える（柴らしさのポイント）
+    const ruff = mesh(new THREE.SphereGeometry(0.11, 12, 10), cream, sx * 0.15, -0.09, 0.02);
     ruff.scale.set(1, 0.85, 1.1);
     head.add(ruff);
   }
@@ -154,7 +164,7 @@ function buildShiba(): ShibaParts {
     const ear = new THREE.Group();
     ear.position.set(sx * 0.14, 0.18, -0.02);
     ear.rotation.set(-0.35, 0, -sx * 0.32);
-    const outer = outline(mesh(new THREE.ConeGeometry(0.115, 0.22, 3), fur, 0, 0.09, 0), 1.1);
+    const outer = mesh(new THREE.ConeGeometry(0.115, 0.22, 3), fur, 0, 0.09, 0);
     const inner = mesh(new THREE.ConeGeometry(0.068, 0.14, 3), pink, 0, 0.06, -0.036);
     ear.add(outer, inner);
     ears.push(ear);
@@ -165,7 +175,7 @@ function buildShiba(): ShibaParts {
 
   // 背中に乗ったくるんと巻いた尾（後ろから見ると輪っか）
   const tail = new THREE.Group();
-  tail.position.set(-0.04, 0.86, 0.38);
+  tail.position.set(-0.03, 0.8, 0.46);
   tail.rotation.set(-0.75, 0, 0.35);
   const curl = outline(mesh(new THREE.TorusGeometry(0.11, 0.075, 12, 28, Math.PI * 1.7), fur, 0, 0.12, 0));
   curl.rotation.z = -Math.PI / 2;
@@ -178,10 +188,11 @@ function buildShiba(): ShibaParts {
   const legs: THREE.Group[] = [];
   const upperGeo = new THREE.CylinderGeometry(0.075, 0.065, 0.28, 10).translate(0, -0.14, 0);
   const pawGeo = new THREE.SphereGeometry(0.075, 10, 8);
-  for (const [x, z] of [[-0.16, -0.3], [0.16, -0.3], [-0.16, 0.32], [0.16, 0.32]]) {
+  for (const [x, z] of [[-0.15, -0.36], [0.15, -0.36], [-0.15, 0.38], [0.15, 0.38]]) {
     const leg = new THREE.Group();
     leg.position.set(x, 0.42, z);
-    const upper = mesh(upperGeo, furDark, 0, 0, 0);
+    // 後ろ足は裏白の「白いパンツ」
+    const upper = mesh(upperGeo, z > 0 ? cream : furDark, 0, 0, 0);
     const paw = mesh(pawGeo, cream, 0, -0.32, -0.02);
     paw.scale.set(1, 0.75, 1.25);
     leg.add(outline(upper, 1.12), paw);
@@ -202,7 +213,7 @@ function buildShiba(): ShibaParts {
   ring.visible = false;
   root.add(ring);
 
-  const shadow = blobShadow(0.45);
+  const shadow = blobShadow(0.45 * SHIBA_SCALE);
   return { root, spin, legs, head, ears, tail, eyes, shadow, towel, ring, furMats: [fur, furDark] };
 }
 
@@ -434,11 +445,11 @@ export class World {
     const shake = g.shake > 0 ? g.shake * 0.4 : 0;
     const boostPull = g.boostT > 0 ? 0.8 : 0;
     this.camera.position.set(
-      wx(g.x) * 0.35 + (Math.random() - 0.5) * shake,
-      THREE.MathUtils.lerp(10.5, 2.6, k) + (Math.random() - 0.5) * shake,
-      THREE.MathUtils.lerp(8.5 + boostPull, 3.6, k),
+      wx(g.x) * 0.35 + THREE.MathUtils.lerp(CAM_SIDE, 0, k) + (Math.random() - 0.5) * shake,
+      THREE.MathUtils.lerp(10.5, 3.3, k) + (Math.random() - 0.5) * shake,
+      THREE.MathUtils.lerp(8.5 + boostPull, 4.8, k),
     );
-    this.camera.lookAt(wx(g.x) * 0.25, THREE.MathUtils.lerp(0, 0.9, k), THREE.MathUtils.lerp(-5, -1.2, k));
+    this.camera.lookAt(wx(g.x) * 0.25 + THREE.MathUtils.lerp(CAM_SIDE * 0.3, 0, k), THREE.MathUtils.lerp(0, 0.9, k), THREE.MathUtils.lerp(-5, -1.4, k));
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -494,7 +505,7 @@ export class World {
     const glow = g.boostT > 0 ? 0.35 + 0.15 * Math.sin(t * 20) : 0;
     for (const m of s.furMats) {
       m.emissive.setRGB(glow, glow * 0.6, 0);
-      if (g.wetT > 0 || g.scene === 'over') m.emissive.setRGB(0, 0.08, 0.25);
+      if (g.wetT > 0 || g.scene === 'over') m.emissive.setRGB(0, 0.03, 0.1);
     }
   }
 
