@@ -1,7 +1,9 @@
 # シバラン 〜シャンプーいやや〜
 
 シャンプーを嫌がる柴犬が、シャワーを持った飼い主から逃げ回るスマホ向けエンドレスランナー。
-HTML5 Canvas + TypeScript + Vite。今は図形だけの仮グラフィック。
+three.js（3D描画）+ Canvas 2D（HUD）+ TypeScript + Vite。今は図形だけの仮グラフィック。
+
+公開URL（GitHub Pages）: https://yasufabric.github.io/shiba-run/
 
 ## 起動
 
@@ -14,6 +16,12 @@ npm run dev
 - スマホ: PCと同じWi-Fiにつないで、`npm run dev` のターミナルに出る `Network: http://<IP>:5173` を開く
 
 ビルド: `npm run build`（`dist/` に出力）／確認: `npm run preview`
+
+## GitHub Pages で公開
+
+`main` に push すると `.github/workflows/deploy.yml` がビルドして GitHub Pages にデプロイする（PR ではビルド確認のみ）。
+
+初回だけ、リポジトリの **Settings → Pages → Build and deployment → Source** を **GitHub Actions** にしておく。
 
 ## 操作
 
@@ -47,7 +55,8 @@ npm run dev
 src/
   config.ts   調整用パラメータ（速度・クールダウン・ペナルティなど）
   game.ts     ゲームロジック（状態・出現・当たり判定）
-  render.ts   Canvas描画（仮グラフィック・HUD）
+  world.ts    three.js による3D描画（柴・飼い主・障害物・水しぶき）
+  hud.ts      Canvas 2D の HUD（スコア・距離ゲージ・ドリルボタン・タイトル/リザルト）
   input.ts    スワイプ／タップ／キーボード入力
   main.ts     初期化・リサイズ・ゲームループ
 ```

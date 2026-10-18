@@ -1,4 +1,4 @@
-import { CFG, LANES, W, laneX } from './config';
+import { CFG, LANES, OWNER_OFFSET, OWNER_SPAN, SHIBA_Y, SPAWN_Y, W, laneX } from './config';
 import type { Action } from './input';
 
 export type ObstacleKind = 'bucket' | 'soap' | 'towel';
@@ -20,12 +20,13 @@ export interface Splash {
   done: boolean;
 }
 
+/** x, y は地面上の位置、h は高さ（いずれも px） */
 export interface Particle {
-  x: number; y: number; vx: number; vy: number;
+  x: number; y: number; h: number; vx: number; vy: number; vh: number;
   life: number; maxLife: number; size: number; color: string;
 }
 
-export interface Popup { x: number; y: number; text: string; life: number; color: string }
+export interface Popup { x: number; text: string; life: number; color: string }
 
 /** 跳び越えるのに必要な高さ */
 const CLEAR_HEIGHT: Record<ObstacleKind, number> = { bucket: 30, soap: 6, towel: 18 };
@@ -45,7 +46,6 @@ function loadBest(): number {
 
 export class Game {
   scene: Scene = 'title';
-  H = 640;
 
   time = 0;
   distance = 0;
@@ -83,10 +83,9 @@ export class Game {
   overT = 0;
   shake = 0;
 
-  get shibaY(): number { return this.H * 0.6; }
+  get shibaY(): number { return SHIBA_Y; }
   get ownerY(): number {
-    const span = this.H - this.shibaY - 80;
-    return this.shibaY + 46 + (this.gap / CFG.gapMax) * span;
+    return SHIBA_Y + OWNER_OFFSET + (this.gap / CFG.gapMax) * OWNER_SPAN;
   }
   get score(): number { return Math.floor(this.distance / CFG.pxPerMeter) + this.bonus; }
   get meters(): number { return Math.floor(this.distance / CFG.pxPerMeter); }
@@ -116,7 +115,7 @@ export class Game {
       lane: 1, x: laneX(1), z: 0, jumpT: -1, gap: CFG.gapStart, ownerX: laneX(1),
       boostT: 0, stumbleT: 0, slipT: 0, blindT: 0, wetT: 0, drillT: 0, drillCd: 0,
       things: [], splashes: [], particles: [], popups: [],
-      nextRow: this.H * 0.5, nextShot: 3, potatoCd: 4, overT: 0, shake: 0,
+      nextRow: 200, nextShot: 3, potatoCd: 4, overT: 0, shake: 0,
     });
   }
 
@@ -144,7 +143,7 @@ export class Game {
           this.drillT = CFG.drillDuration;
           this.drillCd = CFG.drillCooldown;
           this.wetT = 0; // ブルブルで水を切る
-          this.burst(this.x, this.shibaY - this.z, 14, '#9fd8ff', 160);
+          this.burst(this.x, this.shibaY, 14, '#9fd8ff', 160);
         }
         break;
     }
@@ -208,7 +207,7 @@ export class Game {
 
     this.collide();
 
-    this.things = this.things.filter((t) => !t.done && t.y < this.H + 60);
+    this.things = this.things.filter((t) => !t.done && t.y < SHIBA_Y + 200);
     this.splashes = this.splashes.filter((s) => !s.done && s.y > -60);
 
     if (this.gap <= 0) this.gameOver();
@@ -220,7 +219,7 @@ export class Game {
     for (let i = 0; i < n; i++) {
       const r = Math.random();
       const kind: ObstacleKind = r < 0.45 ? 'bucket' : r < 0.75 ? 'soap' : 'towel';
-      this.things.push({ kind, lane: lanes[i], y: -40, done: false });
+      this.things.push({ kind, lane: lanes[i], y: SPAWN_Y, done: false });
     }
     if (Math.random() < 0.5) {
       let kind: ItemKind = 'sasami';
@@ -228,7 +227,7 @@ export class Game {
         kind = 'potato';
         this.potatoCd = 6;
       }
-      this.things.push({ kind, lane: lanes[n], y: -40, done: false });
+      this.things.push({ kind, lane: lanes[n], y: SPAWN_Y, done: false });
     }
   }
 
@@ -335,28 +334,26 @@ export class Game {
     for (const p of this.particles) {
       p.x += p.vx * dt;
       p.y += p.vy * dt;
-      p.vy += 300 * dt;
+      p.h = Math.max(0, p.h + p.vh * dt);
+      p.vh -= 600 * dt;
       p.life -= dt;
     }
     this.particles = this.particles.filter((p) => p.life > 0);
-    for (const p of this.popups) {
-      p.y -= 40 * dt;
-      p.life -= dt;
-    }
+    for (const p of this.popups) p.life -= dt;
     this.popups = this.popups.filter((p) => p.life > 0);
   }
 
   private popup(text: string, color: string): void {
-    this.popups.push({ x: this.x, y: this.shibaY - 50, text, life: 0.9, color });
+    this.popups.push({ x: this.x, text, life: 0.9, color });
   }
 
   private burst(x: number, y: number, n: number, color: string, power: number): void {
     for (let i = 0; i < n; i++) {
       const a = Math.random() * Math.PI * 2;
-      const s = rand(0.3, 1) * power;
-      const life = rand(0.3, 0.7);
+      const s = rand(0.2, 0.7) * power;
+      const life = rand(0.4, 0.8);
       this.particles.push({
-        x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 60,
+        x, y, h: 20 + this.z, vx: Math.cos(a) * s, vy: Math.sin(a) * s, vh: rand(0.6, 1.4) * power,
         life, maxLife: life, size: rand(2, 5), color,
       });
     }

@@ -4,6 +4,16 @@ export const LANES = 3;
 
 export const laneX = (lane: number): number => W / 2 + (lane - 1) * 96;
 
+/**
+ * ゲーム内の座標系（px）。y は進行方向の手前向きが正。
+ * 障害物は y = SPAWN_Y に出現して柴 (SHIBA_Y) に向かって流れてくる。
+ */
+export const SPAWN_Y = -40;
+export const SHIBA_Y = 1400;
+/** 飼い主は柴の後ろ OWNER_OFFSET 〜 OWNER_OFFSET + OWNER_SPAN の範囲にいる */
+export const OWNER_OFFSET = 60;
+export const OWNER_SPAN = 170;
+
 export const CFG = {
   pxPerMeter: 20,
   baseSpeed: 260, // 開始時のスクロール速度 (px/s)
