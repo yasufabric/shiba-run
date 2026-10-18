@@ -273,7 +273,7 @@ export class World {
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     this.renderer.setClearColor(BG);
-    this.scene.fog = new THREE.Fog(BG, 24, 44);
+    this.scene.fog = new THREE.Fog(BG, 26, 48);
 
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0x9fc9d9, 2.2));
     const sun = new THREE.DirectionalLight(0xffffff, 1.6);
@@ -317,7 +317,7 @@ export class World {
     this.renderer.setSize(width, height, false);
     const aspect = width / height;
     // 縦長画面でも3レーン全部が収まるよう、横方向の画角から縦の画角を決める
-    const hfov = 2 * Math.atan(3.4 / 11.5);
+    const hfov = 2 * Math.atan(3.4 / 13.5);
     const vfov = 2 * Math.atan(Math.tan(hfov / 2) / aspect);
     this.camera.fov = THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(vfov), 45, 80);
     this.camera.aspect = aspect;
@@ -343,15 +343,15 @@ export class World {
     this.syncSplashes(g, t);
     this.updateParticles(g.particles);
 
-    // カメラ: 柴の後ろ上方から。左右は少しだけ追従
+    // カメラ: 柴の後ろ上方から見下ろす（前方の見通し優先）。左右は少しだけ追従
     const shake = g.shake > 0 ? g.shake * 0.4 : 0;
     const boostPull = g.boostT > 0 ? 0.8 : 0;
     this.camera.position.set(
       wx(g.x) * 0.35 + (Math.random() - 0.5) * shake,
-      7.6 + (Math.random() - 0.5) * shake,
-      8.2 + boostPull,
+      10.5 + (Math.random() - 0.5) * shake,
+      8.5 + boostPull,
     );
-    this.camera.lookAt(wx(g.x) * 0.25, 0, -6);
+    this.camera.lookAt(wx(g.x) * 0.25, 0, -5);
     this.renderer.render(this.scene, this.camera);
   }
 
