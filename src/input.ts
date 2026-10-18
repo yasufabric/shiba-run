@@ -1,4 +1,6 @@
-export type Action = 'left' | 'right' | 'jump' | 'drill' | 'tap' | 'mute';
+export type Action =
+  | 'left' | 'right' | 'jump' | 'drill' | 'tap' | 'mute'
+  | 'share' | 'toTitle' | 'prevSkin' | 'nextSkin' | 'unlock';
 
 const SWIPE_PX = 24;
 

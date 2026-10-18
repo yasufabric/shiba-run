@@ -1,6 +1,7 @@
 import { CFG, LANES, OWNER_OFFSET, OWNER_SPAN, SHIBA_Y, SPAWN_Y, W, laneX } from './config';
 import type { Sfx } from './audio';
 import type { Action } from './input';
+import { SKINS, loadSave, writeSave, type SaveData } from './progress';
 
 export type ObstacleKind = 'bucket' | 'soap' | 'towel';
 export type ItemKind = 'potato' | 'sasami';
@@ -11,6 +12,8 @@ export interface Thing {
   lane: number;
   y: number;
   done: boolean;
+  /** 初登場なので説明ラベルを出す */
+  hint?: boolean;
 }
 
 export interface Splash {
@@ -19,6 +22,7 @@ export interface Splash {
   wide: boolean; // 3レーンを覆う大波
   warn: number; // 発射前の予告時間
   done: boolean;
+  hint?: boolean;
 }
 
 /** x, y は地面上の位置、h は高さ（いずれも px） */
@@ -30,7 +34,7 @@ export interface Particle {
 export interface Popup { x: number; text: string; life: number; color: string }
 
 /** 跳び越えるのに必要な高さ */
-const CLEAR_HEIGHT: Record<ObstacleKind, number> = { bucket: 30, soap: 6, towel: 18 };
+const CLEAR_HEIGHT: Record<ObstacleKind, number> = { bucket: 30, soap: 6, towel: 26 };
 const OBSTACLES: ObstacleKind[] = ['bucket', 'soap', 'towel'];
 const isObstacle = (k: Thing['kind']): k is ObstacleKind => (OBSTACLES as string[]).includes(k);
 
@@ -86,6 +90,31 @@ export class Game {
   /** このフレームで鳴らす効果音（main 側で取り出して再生する） */
   sounds: Sfx[] = [];
 
+  /** 着せかえとささみの所持数（端末に保存） */
+  save: SaveData = loadSave();
+  /** タイトル画面で表示している柴（未解放のものも眺められる） */
+  viewSkin = Math.max(0, SKINS.findIndex((s) => s.id === this.save.skin));
+  /** この回に拾ったささみの数 */
+  runSasami = 0;
+  /** 飼い主のセリフ（吹き出し） */
+  shout = '';
+  shoutT = 0;
+  nextShout = 0;
+
+  /** タイトル画面の一言メッセージ */
+  titleMsg = '';
+  titleMsgT = 0;
+
+  /** いま描画に使う柴の毛色 */
+  get skin() {
+    if (this.scene === 'title') return SKINS[this.viewSkin];
+    return SKINS.find((s) => s.id === this.save.skin) ?? SKINS[0];
+  }
+
+  isUnlocked(i: number): boolean {
+    return this.save.unlocked.includes(SKINS[i].id);
+  }
+
   get shibaY(): number { return SHIBA_Y; }
   get ownerY(): number {
     return SHIBA_Y + OWNER_OFFSET + (this.gap / CFG.gapMax) * OWNER_SPAN;
@@ -118,18 +147,24 @@ export class Game {
       lane: 1, x: laneX(1), z: 0, jumpT: -1, gap: CFG.gapStart, ownerX: laneX(1),
       boostT: 0, stumbleT: 0, slipT: 0, blindT: 0, wetT: 0, drillT: 0, drillCd: 0,
       things: [], splashes: [], particles: [], popups: [],
-      nextRow: 200, nextShot: 3, potatoCd: 4, overT: 0, shake: 0,
+      nextRow: 200, nextShot: 3, potatoCd: 4, overT: 0, shake: 0, runSasami: 0,
+      nextShout: 8,
     });
+    this.say('こら〜！お風呂だよ！', 2.8);
+    this.viewSkin = Math.max(0, SKINS.findIndex((s) => s.id === this.save.skin));
     this.sounds.push('start');
   }
 
   handle(a: Action): void {
     if (this.scene === 'title') {
-      this.start();
+      this.handleTitle(a);
       return;
     }
     if (this.scene === 'over') {
-      if (this.overT > 0.8) this.start();
+      // シェアは main 側でタップ中に直接処理する（ブラウザの制約）
+      if (a === 'share' || this.overT < 0.8) return;
+      if (a === 'toTitle') this.goTitle();
+      else this.start();
       return;
     }
     switch (a) {
@@ -157,8 +192,59 @@ export class Game {
     }
   }
 
+  /** タイトル画面: 左右で柴を選び、未解放ならささみで解放、それ以外の操作でスタート */
+  private handleTitle(a: Action): void {
+    switch (a) {
+      case 'left':
+      case 'prevSkin':
+      case 'right':
+      case 'nextSkin': {
+        const d = a === 'left' || a === 'prevSkin' ? -1 : 1;
+        this.viewSkin = (this.viewSkin + d + SKINS.length) % SKINS.length;
+        if (this.isUnlocked(this.viewSkin)) {
+          this.save.skin = SKINS[this.viewSkin].id;
+          writeSave(this.save);
+        }
+        this.titleMsg = '';
+        this.sounds.push('select');
+        return;
+      }
+      case 'unlock': {
+        const skin = SKINS[this.viewSkin];
+        if (this.isUnlocked(this.viewSkin)) return;
+        if (this.save.sasami < skin.cost) {
+          this.titleMsg = `ささみが あと${skin.cost - this.save.sasami}本 たりない…`;
+          this.titleMsgT = 2;
+          this.sounds.push('towel');
+          return;
+        }
+        this.save.sasami -= skin.cost;
+        this.save.unlocked.push(skin.id);
+        this.save.skin = skin.id;
+        writeSave(this.save);
+        this.titleMsg = `${skin.name} を解放した！`;
+        this.titleMsgT = 2;
+        this.sounds.push('unlock');
+        return;
+      }
+      case 'share':
+      case 'toTitle':
+        return;
+      default:
+        this.start();
+    }
+  }
+
+  /** タイトル（柴の着せかえ画面）に戻る */
+  private goTitle(): void {
+    this.scene = 'title';
+    this.viewSkin = Math.max(0, SKINS.findIndex((s) => s.id === this.save.skin));
+    this.titleMsg = '';
+  }
+
   update(dt: number): void {
     this.updateEffects(dt);
+    this.titleMsgT = Math.max(0, this.titleMsgT - dt);
     if (this.scene !== 'playing') {
       this.overT += dt;
       return;
@@ -204,6 +290,15 @@ export class Game {
       this.nextShot = Math.max(1.3, 3.2 - this.time * 0.02) + rand(0, 1.0);
     }
     this.ownerAim = Math.max(0, this.ownerAim - dt);
+    this.shoutT = Math.max(0, this.shoutT - dt);
+    this.nextShout -= dt;
+    if (this.nextShout <= 0) {
+      const lines = this.gap < 30
+        ? ['つかまえた〜！…あれ？', 'もうすぐだぞ〜！', 'シャンプーするよ〜！']
+        : ['まて〜っ！', '逃げるな〜！', 'シャンプーするだけ！', 'いい子だから〜'];
+      this.say(lines[Math.floor(Math.random() * lines.length)]);
+      this.nextShout = rand(6, 10);
+    }
     for (const s of this.splashes) {
       if (s.warn > 0) {
         s.warn -= dt;
@@ -221,13 +316,26 @@ export class Game {
     if (this.gap <= 0) this.gameOver();
   }
 
+  private say(text: string, dur = 2): void {
+    this.shout = text;
+    this.shoutT = dur;
+  }
+
+  /** 初めて出てきた種類なら説明ラベルを出す（1台につき1回） */
+  private firstTime(kind: string): boolean {
+    if (this.save.seen.includes(kind)) return false;
+    this.save.seen.push(kind);
+    writeSave(this.save);
+    return true;
+  }
+
   private spawnRow(): void {
     const lanes = [0, 1, 2].sort(() => Math.random() - 0.5);
     const n = Math.random() < 0.3 + Math.min(0.35, this.time * 0.005) ? 2 : 1;
     for (let i = 0; i < n; i++) {
       const r = Math.random();
       const kind: ObstacleKind = r < 0.45 ? 'bucket' : r < 0.75 ? 'soap' : 'towel';
-      this.things.push({ kind, lane: lanes[i], y: SPAWN_Y, done: false });
+      this.things.push({ kind, lane: lanes[i], y: SPAWN_Y, done: false, hint: this.firstTime(kind) });
     }
     if (Math.random() < 0.5) {
       let kind: ItemKind = 'sasami';
@@ -235,13 +343,17 @@ export class Game {
         kind = 'potato';
         this.potatoCd = 6;
       }
-      this.things.push({ kind, lane: lanes[n], y: SPAWN_Y, done: false });
+      this.things.push({ kind, lane: lanes[n], y: SPAWN_Y, done: false, hint: this.firstTime(kind) });
     }
   }
 
   private fire(): void {
     const wide = this.time > CFG.waveStartTime && Math.random() < 0.3;
-    this.splashes.push({ lane: this.lane, y: this.ownerY - 20, wide, warn: wide ? 0.8 : 0.35, done: false });
+    this.splashes.push({
+      lane: this.lane, y: this.ownerY - 20, wide, warn: wide ? 0.8 : 0.35, done: false,
+      hint: this.firstTime(wide ? 'wave' : 'splash'),
+    });
+    if (wide) this.say('それ〜っ！', 1.5);
     this.ownerAim = wide ? 0.8 : 0.35;
   }
 
@@ -252,6 +364,7 @@ export class Game {
       if (t.kind === 'sasami') {
         t.done = true;
         this.bonus += CFG.sasamiBonus;
+        this.runSasami++;
         this.popup(`+${CFG.sasamiBonus}`, '#ff8fa3');
         this.sounds.push('sasami');
         this.burst(this.x, sy, 8, '#ffd0d8', 120);
@@ -282,6 +395,7 @@ export class Game {
       if (this.drillT > 0 && inLane && Math.abs(s.y - sy) < CFG.drillRadius) {
         s.done = true;
         this.popup('はじいた!', '#3fa7ff');
+        if (Math.random() < 0.4) this.say('あっ、こら！', 1.2);
         this.sounds.push('deflect');
         this.burst(s.wide ? W / 2 : laneX(s.lane), s.y, s.wide ? 24 : 12, '#7cc8ff', 260);
         this.bonus += 30;
@@ -334,6 +448,8 @@ export class Game {
     this.overT = 0;
     this.shake = 0.4;
     this.sounds.push('gameover');
+    this.save.sasami += this.runSasami;
+    writeSave(this.save);
     this.burst(this.x, this.shibaY, 30, '#9fd8ff', 260);
     this.burst(this.x, this.shibaY, 20, '#ffffff', 160); // シャンプーの泡
     if (this.score > this.best) {

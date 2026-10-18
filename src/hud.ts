@@ -1,5 +1,6 @@
-import { CFG, W } from './config';
+import { CFG, W, laneX } from './config';
 import type { Game } from './game';
+import { SKINS } from './progress';
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -78,40 +79,84 @@ function drawHud(ctx: Ctx, g: Game, H: number): void {
   text(ctx, 'ドリル', b.x, b.y + 12, 12, '#ffffff');
 }
 
+type Rect = { x: number; y: number; w: number; h: number };
+type Circle = { x: number; y: number; r: number };
+
+/** タイトル・リザルト画面のボタン配置（論理座標） */
+export const menuButtons = (H: number) => ({
+  prevSkin: { x: W / 2 - 128, y: H * 0.58, r: 24 } as Circle,
+  nextSkin: { x: W / 2 + 128, y: H * 0.58, r: 24 } as Circle,
+  unlock: { x: W / 2 - 115, y: H * 0.83, w: 230, h: 44 } as Rect,
+  share: { x: W / 2 - 158, y: H * 0.83, w: 170, h: 46 } as Rect,
+  toTitle: { x: W / 2 + 22, y: H * 0.83, w: 136, h: 46 } as Rect,
+});
+
+export const inRect = (r: Rect, x: number, y: number) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+export const inCircle = (c: Circle, x: number, y: number) => Math.hypot(x - c.x, y - c.y) <= c.r + 8;
+
+function button(ctx: Ctx, r: Rect, label: string, color: string, size = 17): void {
+  roundRect(ctx, r.x, r.y + 3, r.w, r.h, r.h / 2, 'rgba(0,0,0,0.25)');
+  roundRect(ctx, r.x, r.y, r.w, r.h, r.h / 2, color);
+  text(ctx, label, r.x + r.w / 2, r.y + r.h / 2, size, '#ffffff');
+}
+
+function arrow(ctx: Ctx, c: Circle, dir: number): void {
+  ellipse(ctx, c.x, c.y, c.r, c.r, 'rgba(25,40,60,0.6)');
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.moveTo(c.x + dir * 9, c.y);
+  ctx.lineTo(c.x - dir * 6, c.y - 10);
+  ctx.lineTo(c.x - dir * 6, c.y + 10);
+  ctx.fill();
+}
+
 function drawOverlay(ctx: Ctx, g: Game, H: number): void {
   // 柴が見えるよう、下に行くほど暗幕を薄くする
   const shade = ctx.createLinearGradient(0, 0, 0, H);
   shade.addColorStop(0, 'rgba(20,30,50,0.7)');
-  shade.addColorStop(0.55, 'rgba(20,30,50,0.55)');
-  shade.addColorStop(0.75, 'rgba(20,30,50,0.1)');
-  shade.addColorStop(1, 'rgba(20,30,50,0.35)');
+  shade.addColorStop(0.42, 'rgba(20,30,50,0.55)');
+  shade.addColorStop(0.55, 'rgba(20,30,50,0.1)');
+  shade.addColorStop(1, 'rgba(20,30,50,0.4)');
   ctx.fillStyle = shade;
   ctx.fillRect(0, 0, W, H);
+  const ui = menuButtons(H);
   if (g.scene === 'title') {
-    text(ctx, 'シバラン', W / 2, H * 0.16, 48, '#ffb35c');
-    text(ctx, '〜シャンプーいやや〜', W / 2, H * 0.16 + 46, 18, '#ffffff');
+    text(ctx, `ささみ ×${g.save.sasami}`, 20, 28, 15, '#ffd0d8', 'left');
+    text(ctx, 'シバラン', W / 2, H * 0.12, 48, '#ffb35c');
+    text(ctx, '〜シャンプーいやや〜', W / 2, H * 0.12 + 44, 18, '#ffffff');
     const lines = [
       '← → スワイプ：レーン移動',
-      '↑ スワイプ / タップ：ジャンプ',
-      '↓ スワイプ / 右下ボタン：柴ドリル',
-      '',
-      'バケツ：ぶつかると転ぶ',
-      '石けん：踏むと滑る',
-      'タオル：前が見えなくなる',
-      'さつまいも：猛ダッシュ＆無敵',
-      `ささみ：ボーナス +${CFG.sasamiBonus}`,
-      'シャワーは柴ドリルで弾け！',
+      '↑ スワイプ・タップ：ジャンプ',
+      '↓ スワイプ・右下ボタン：柴ドリル',
+      'さつまいもで無敵、ささみを集めて柴を解放',
     ];
-    lines.forEach((l, i) => text(ctx, l, W / 2, H * 0.28 + i * 23, 14, '#ffffff', 'center'));
-    if (Math.floor(performance.now() / 500) % 2 === 0) text(ctx, 'タップでスタート', W / 2, H * 0.88, 22, '#ffffff');
+    lines.forEach((l, i) => text(ctx, l, W / 2, H * 0.25 + i * 22, 14, '#ffffff'));
+
+    // 柴えらび
+    arrow(ctx, ui.prevSkin, -1);
+    arrow(ctx, ui.nextSkin, 1);
+    const skin = g.skin;
+    if (g.isUnlocked(g.viewSkin)) {
+      text(ctx, skin.name, W / 2, ui.unlock.y + ui.unlock.h / 2, 22, '#ffffff');
+    } else {
+      const enough = g.save.sasami >= skin.cost;
+      button(ctx, ui.unlock, `${skin.name}を解放（ささみ×${skin.cost}）`, enough ? '#e8763a' : '#6b7684', 15);
+    }
+    if (g.titleMsgT > 0) text(ctx, g.titleMsg, W / 2, ui.unlock.y - 16, 14, '#ffe08a');
+    if (Math.floor(performance.now() / 500) % 2 === 0) {
+      text(ctx, g.isUnlocked(g.viewSkin) ? 'タップでスタート' : `タップで${SKINS.find((s) => s.id === g.save.skin)?.name ?? ''}でスタート`, W / 2, H * 0.94, 18, '#ffffff');
+    }
   } else {
-    text(ctx, 'つかまった…', W / 2, H * 0.22, 36, '#9fd8ff');
-    text(ctx, 'シャンプーの刑', W / 2, H * 0.22 + 42, 18, '#ffffff');
-    text(ctx, `${g.score}`, W / 2, H * 0.4, 56, '#ffffff');
-    text(ctx, `${g.meters} m  + ボーナス ${g.bonus}`, W / 2, H * 0.4 + 44, 14, '#ffffff', 'center');
-    text(ctx, g.newBest ? 'ハイスコア更新！' : `BEST ${g.best}`, W / 2, H * 0.54, 20, '#ffe08a');
-    if (g.overT > 0.8 && Math.floor(performance.now() / 500) % 2 === 0) {
-      text(ctx, 'タップでリトライ', W / 2, H * 0.86, 22, '#ffffff');
+    text(ctx, 'つかまった…', W / 2, H * 0.17, 36, '#9fd8ff');
+    text(ctx, 'シャンプーの刑', W / 2, H * 0.17 + 40, 18, '#ffffff');
+    text(ctx, `${g.score}`, W / 2, H * 0.33, 56, '#ffffff');
+    text(ctx, `${g.meters} m  + ボーナス ${g.bonus}`, W / 2, H * 0.33 + 42, 14, '#ffffff');
+    text(ctx, g.newBest ? 'ハイスコア更新！' : `BEST ${g.best}`, W / 2, H * 0.47, 20, '#ffe08a');
+    text(ctx, `ささみ +${g.runSasami}（所持 ${g.save.sasami}）`, W / 2, H * 0.53, 15, '#ffd0d8');
+    if (g.overT > 0.8) {
+      button(ctx, ui.share, '結果をシェア', '#1d9bf0');
+      button(ctx, ui.toTitle, '柴をえらぶ', '#e8763a', 15);
+      if (Math.floor(performance.now() / 500) % 2 === 0) text(ctx, 'タップでリトライ', W / 2, H * 0.94, 20, '#ffffff');
     }
   }
 }
@@ -145,6 +190,60 @@ function drawMuteButton(ctx: Ctx, muted: boolean): void {
   ctx.stroke();
 }
 
+const HINTS: Record<string, string> = {
+  bucket: 'バケツ：ぶつかると転ぶ！ジャンプでかわせ',
+  soap: '石けん：踏むとツルッと滑る！',
+  towel: 'タオル：ぶつかると前が見えない！',
+  potato: '焼きいも：食べると無敵ダッシュ！',
+  sasami: 'ささみ：集めると新しい柴を解放！',
+  splash: 'シャワー：レーン移動か柴ドリルでよけろ',
+  wave: '大波：柴ドリル（↓スワイプ）で弾け！',
+};
+
+/** 指し示す先のある説明ラベル */
+function label(ctx: Ctx, s: string, x: number, y: number): void {
+  ctx.font = `bold 13px ${FONT}`;
+  const w = ctx.measureText(s).width + 20;
+  const lx = Math.max(8, Math.min(W - 8 - w, x - w / 2));
+  roundRect(ctx, lx, y - 34, w, 26, 13, 'rgba(255,255,255,0.95)');
+  ctx.fillStyle = 'rgba(255,255,255,0.95)';
+  ctx.beginPath();
+  ctx.moveTo(x - 6, y - 9);
+  ctx.lineTo(x + 6, y - 9);
+  ctx.lineTo(x, y - 1);
+  ctx.fill();
+  text(ctx, s, lx + w / 2, y - 21, 13, '#2a3a4a', 'center', false);
+}
+
+/** 飼い主の吹き出し。柴にかぶらないよう、飼い主の頭の横（画面の空いている側）に出す */
+function bubble(ctx: Ctx, s: string, x: number, y: number): void {
+  ctx.font = `bold 14px ${FONT}`;
+  const w = Math.min(W * 0.62, ctx.measureText(s).width + 22);
+  const right = x < W / 2;
+  const gap = 34;
+  const lx = right ? Math.min(W - 8 - w, x + gap) : Math.max(8, x - gap - w);
+  const top = y - 16;
+  ctx.fillStyle = '#ffffff';
+  ctx.strokeStyle = '#2a3a4a';
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.roundRect(lx, top, w, 32, 16);
+  const ex = right ? lx : lx + w;
+  ctx.moveTo(ex, top + 10);
+  ctx.lineTo(right ? x + 12 : x - 12, y + 4);
+  ctx.lineTo(ex, top + 22);
+  ctx.fill();
+  ctx.stroke();
+  // しっぽの付け根の線を消す
+  ctx.fillRect(right ? ex : ex - 4, top + 11, 4, 10);
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(lx + 6, top, w - 12, 32);
+  ctx.clip();
+  text(ctx, s, lx + w / 2, top + 16, 14, '#d23c3c', 'center', false);
+  ctx.restore();
+}
+
 /** project: ゲーム座標 (x, 高さ, y) → HUD の論理座標 */
 export function drawHudLayer(ctx: Ctx, g: Game, H: number, muted: boolean, project: (x: number, h: number, y: number) => { x: number; y: number }): void {
   ctx.clearRect(0, 0, W, H);
@@ -172,6 +271,30 @@ export function drawHudLayer(ctx: Ctx, g: Game, H: number, muted: boolean, proje
 
   if (g.splashes.some((s) => s.wide && s.warn > 0)) {
     text(ctx, '大波！ ドリルで弾け！', W / 2, H * 0.7, 20, '#cfe9ff');
+  }
+
+  if (g.scene === 'playing') {
+    // 説明ラベルは重ならないよう、柴にいちばん近い1つだけ出す
+    const sp = g.splashes.find((s) => s.hint && !s.done && s.y > g.shibaY - 300);
+    const th = g.things.filter((t) => t.hint && !t.done && t.y < g.shibaY + 30).sort((a, b) => b.y - a.y)[0];
+    if (sp) {
+      const p = project(sp.wide ? W / 2 : laneX(sp.lane), 60, Math.min(sp.y, g.ownerY - 40));
+      label(ctx, HINTS[sp.wide ? 'wave' : 'splash'], p.x, p.y);
+    } else if (th) {
+      const p = project(laneX(th.lane), 70, th.y);
+      label(ctx, HINTS[th.kind], p.x, p.y);
+    }
+    if (g.shoutT > 0) {
+      const p = project(g.ownerX, 105, g.ownerY);
+      bubble(ctx, g.shout, p.x, Math.min(p.y, H - 40));
+    }
+    // 最初に目的をはっきり見せる
+    if (g.time < 2.6) {
+      ctx.globalAlpha = Math.min(1, (2.6 - g.time) * 2);
+      text(ctx, '飼い主から逃げろ！', W / 2, H * 0.3, 32, '#ffb35c');
+      text(ctx, 'つかまるとシャンプーの刑', W / 2, H * 0.3 + 36, 16, '#ffffff');
+      ctx.globalAlpha = 1;
+    }
   }
 
   for (const p of g.popups) {
