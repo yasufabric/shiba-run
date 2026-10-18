@@ -190,6 +190,9 @@ function drawMuteButton(ctx: Ctx, muted: boolean): void {
   ctx.stroke();
 }
 
+/** 上部のスコア表示の下端（論理座標） */
+const HUD_BOTTOM = 125;
+
 const HINTS: Record<string, string> = {
   bucket: 'バケツ：ぶつかると転ぶ！ジャンプでかわせ',
   soap: '石けん：踏むとツルッと滑る！',
@@ -279,10 +282,11 @@ export function drawHudLayer(ctx: Ctx, g: Game, H: number, muted: boolean, proje
     const th = g.things.filter((t) => t.hint && !t.done && t.y < g.shibaY + 30).sort((a, b) => b.y - a.y)[0];
     if (sp) {
       const p = project(sp.wide ? W / 2 : laneX(sp.lane), 60, Math.min(sp.y, g.ownerY - 40));
-      label(ctx, HINTS[sp.wide ? 'wave' : 'splash'], p.x, p.y);
+      if (p.y > HUD_BOTTOM) label(ctx, HINTS[sp.wide ? 'wave' : 'splash'], p.x, p.y);
     } else if (th) {
       const p = project(laneX(th.lane), 70, th.y);
-      label(ctx, HINTS[th.kind], p.x, p.y);
+      // 遠くてスコア表示の裏に隠れる位置にいるうちは出さない
+      if (p.y > HUD_BOTTOM) label(ctx, HINTS[th.kind], p.x, p.y);
     }
     if (g.shoutT > 0) {
       const p = project(g.ownerX, 80, g.ownerY);

@@ -128,7 +128,11 @@ export class Game {
 
   speed(): number {
     const base = this.baseSpeed();
-    if (this.boostT > 0) return base * CFG.boostMult;
+    if (this.boostT > 0) {
+      // 急に速度が変わると画面がガクッと見えるので、始まりと終わりはなめらかに加減速する
+      const ramp = Math.min(1, (CFG.boostDuration - this.boostT) / 0.25, this.boostT / 0.6);
+      return base * (1 + (CFG.boostMult - 1) * ramp);
+    }
     let m = 1;
     if (this.stumbleT > 0) m *= CFG.stumbleMult;
     if (this.wetT > 0) m *= CFG.wetMult;
