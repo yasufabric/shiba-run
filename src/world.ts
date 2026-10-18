@@ -101,30 +101,33 @@ function buildShiba(): ShibaParts {
 
   // 胴体と裏白（胸・お腹・お尻）
   const body = outline(mesh(new THREE.SphereGeometry(0.3, 24, 16), fur, 0, 0.56, 0.05));
-  body.scale.set(0.95, 0.88, 1.55);
-  const chest = mesh(new THREE.SphereGeometry(0.22, 16, 12), cream, 0, 0.55, -0.33);
-  chest.scale.set(1, 1.1, 0.8);
+  body.scale.set(1, 0.88, 1.55);
+  const chest = mesh(new THREE.SphereGeometry(0.2, 16, 12), cream, 0, 0.55, -0.38);
+  chest.scale.set(0.85, 1.1, 0.8);
   const belly = mesh(new THREE.SphereGeometry(0.25, 16, 10), cream, 0, 0.43, 0.05);
   belly.scale.set(0.82, 0.6, 1.3);
   const rump = mesh(new THREE.SphereGeometry(0.15, 14, 10), cream, 0, 0.5, 0.48);
   rump.scale.set(1, 1.05, 0.4);
-  const neck = mesh(new THREE.SphereGeometry(0.2, 16, 12), fur, 0, 0.8, -0.36);
+  // 肩から頭へなだらかにつながる太めの首（くびれて見えないように）
+  const neck = mesh(new THREE.SphereGeometry(0.25, 18, 14), fur, 0, 0.69, -0.3);
+  neck.scale.set(1, 1, 1.2);
   spin.add(body, chest, belly, rump, neck);
 
-  // 赤い首輪と金の鈴（首の向きに合わせて傾ける）
-  const collar = outline(mesh(new THREE.TorusGeometry(0.2, 0.05, 10, 28), mat(0xd7263d), 0, 0.82, -0.4), 1.12);
+  // 赤い首輪と金の鈴（首の向きに合わせて傾け、首に沿うサイズに）
+  const collar = outline(mesh(new THREE.TorusGeometry(0.235, 0.045, 10, 32), mat(0xd7263d), 0, 0.81, -0.4), 1.1);
   collar.rotation.x = 0.93;
-  const bell = outline(mesh(new THREE.SphereGeometry(0.06, 12, 10), mat(0xf5c542), 0, 0.68, -0.58), 1.12);
+  collar.scale.set(1, 0.9, 1);
+  const bell = outline(mesh(new THREE.SphereGeometry(0.055, 12, 10), mat(0xf5c542), 0, 0.65, -0.6), 1.12);
   spin.add(collar, bell);
 
   // 頭
   const head = new THREE.Group();
   head.position.set(0, 0.98, -0.52);
   const skull = outline(mesh(new THREE.SphereGeometry(0.27, 24, 16), fur, 0, 0, 0));
-  skull.scale.set(1.08, 0.92, 1);
+  skull.scale.set(1.02, 0.92, 1);
   // 横に張った頬の毛（後ろから見たときに頭が丸い玉に見えないように）
   for (const sx of [-1, 1]) {
-    const ruff = outline(mesh(new THREE.SphereGeometry(0.13, 12, 10), fur, sx * 0.19, -0.09, 0.03));
+    const ruff = outline(mesh(new THREE.SphereGeometry(0.12, 12, 10), fur, sx * 0.16, -0.1, 0.02));
     ruff.scale.set(1, 0.85, 1.1);
     head.add(ruff);
   }
