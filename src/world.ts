@@ -43,6 +43,43 @@ function tileTexture(base: string, line: string, rx: number, ry: number): THREE.
   return t;
 }
 
+/** 唐草模様（緑地に白い渦巻きのつる） */
+function karakusaTexture(): THREE.CanvasTexture {
+  const size = 128;
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#1f7a4c';
+  g.fillRect(0, 0, size, size);
+  g.strokeStyle = '#f4f1e1';
+  g.lineWidth = 5;
+  g.lineCap = 'round';
+  const curl = (cx: number, cy: number, r: number, dir: number) => {
+    g.beginPath();
+    for (let i = 0; i <= 40; i++) {
+      const a = dir * i * 0.3;
+      const rr = r * (1 - i / 44);
+      const x = cx + Math.cos(a) * rr;
+      const y = cy + Math.sin(a) * rr;
+      if (i === 0) g.moveTo(x, y);
+      else g.lineTo(x, y);
+    }
+    g.stroke();
+  };
+  // タイルの端でつながるように、つるの波線と渦巻きを2つずつ置く
+  g.beginPath();
+  for (let x = 0; x <= size; x += 4) g.lineTo(x, size / 2 + Math.sin((x / size) * Math.PI * 2) * 22);
+  g.stroke();
+  curl(size * 0.25, size * 0.25, 20, 1);
+  curl(size * 0.75, size * 0.75, 20, -1);
+  curl(size * 0.75, size * 0.18, 12, -1);
+  curl(size * 0.25, size * 0.82, 12, 1);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
 function stripeTexture(): THREE.CanvasTexture {
   const c = document.createElement('canvas');
   c.width = 64;
@@ -128,6 +165,27 @@ function buildShiba(): ShibaParts {
     spin.add(haunch, pants);
   }
   spin.add(body, shoulder, chest, belly, rump, neck);
+
+  // 首に巻いた唐草模様の風呂敷（後ろに結び目、前に三角が垂れる）
+  const kTex = karakusaTexture();
+  kTex.repeat.set(6, 1);
+  const scarfMat = mat(0xffffff, { map: kTex });
+  const band = outline(mesh(new THREE.TorusGeometry(0.21, 0.055, 10, 32), scarfMat, 0, 0.75, -0.56), 1.08);
+  band.rotation.x = 0.57;
+  const knotTex = karakusaTexture();
+  const knotMat = mat(0xffffff, { map: knotTex });
+  const knot = outline(mesh(new THREE.SphereGeometry(0.07, 12, 10), knotMat, 0, 0.94, -0.44), 1.1);
+  const ends: THREE.Mesh[] = [];
+  for (const sx of [-1, 1]) {
+    // 結び目から左右後ろに跳ねる布の端
+    const end = outline(mesh(new THREE.ConeGeometry(0.075, 0.26, 4), knotMat, sx * 0.11, 0.99, -0.38), 1.1);
+    end.rotation.set(0.6, 0, -sx * 1.0);
+    ends.push(end);
+  }
+  const bib = outline(mesh(new THREE.ConeGeometry(0.16, 0.26, 3), knotMat, 0, 0.5, -0.76), 1.06);
+  bib.rotation.set(Math.PI + 0.35, Math.PI, 0);
+  bib.scale.z = 0.35;
+  spin.add(band, knot, ...ends, bib);
 
   // 頭: 走る犬のように低め・前寄りに置いて、後ろから見ても胴の上に乗った玉に見えないようにする
   const head = new THREE.Group();
