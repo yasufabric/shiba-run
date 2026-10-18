@@ -12,7 +12,7 @@ export const SPAWN_Y = -40;
 export const SHIBA_Y = 1400;
 /** 飼い主は柴の後ろ OWNER_OFFSET 〜 OWNER_OFFSET + OWNER_SPAN の範囲にいる */
 export const OWNER_OFFSET = 60;
-export const OWNER_SPAN = 170;
+export const OWNER_SPAN = 150;
 
 export const CFG = {
   pxPerMeter: 20,

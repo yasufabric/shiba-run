@@ -12,8 +12,10 @@ const TILE = 0.95;
 const FLOOR_W = 6.2;
 const FLOOR_L = 80;
 const MAX_PARTICLES = 400;
+const MAX_SPRAY = 120;
 /** 柴の表示倍率（当たり判定はゲームロジック側なので見た目だけ） */
 const SHIBA_SCALE = 1.35;
+const OWNER_SCALE = 1.15;
 
 const mat = (color: THREE.ColorRepresentation, extra: THREE.MeshToonMaterialParameters = {}) =>
   new THREE.MeshToonMaterial({ color, ...extra });
@@ -276,45 +278,119 @@ function buildShiba(): ShibaParts {
 
 interface OwnerParts {
   root: THREE.Group;
-  legs: THREE.Mesh[];
+  body: THREE.Group;
+  legs: THREE.Group[];
+  armL: THREE.Group;
+  armR: THREE.Group;
+  /** シャワーの吹き出し口（水しぶきの発生位置） */
+  nozzle: THREE.Object3D;
   showerMat: THREE.MeshToonMaterial;
 }
 
 function buildOwner(): OwnerParts {
   const root = new THREE.Group();
+  root.scale.setScalar(OWNER_SCALE);
+  // 走る姿勢で少し前のめり
+  const body = new THREE.Group();
+  body.rotation.x = -0.12;
+  root.add(body);
   const skin = mat(0xf2c9a0);
   const shirt = mat(0xff7b54);
-  const pants = mat(0x3d5a80);
-  const hair = mat(0x5a3b2e);
-  const showerMat = mat(0xc9d3dd);
+  const shorts = mat(0x3d5a80);
+  const hair = mat(0x4a2f24);
+  const shoe = mat(0xffffff);
+  const showerMat = mat(0xd5dde6);
 
-  const legs: THREE.Mesh[] = [];
-  const legGeo = new THREE.CylinderGeometry(0.13, 0.11, 0.7, 10);
-  legGeo.translate(0, -0.35, 0);
-  for (const x of [-0.17, 0.17]) {
-    const leg = mesh(legGeo, pants, x, 0.7, 0);
+  // 脚（短パン＋すね＋スニーカー）。付け根を回転軸にする
+  const legs: THREE.Group[] = [];
+  for (const sx of [-1, 1]) {
+    const leg = new THREE.Group();
+    leg.position.set(sx * 0.15, 0.95, 0);
+    leg.add(outline(mesh(new THREE.CylinderGeometry(0.15, 0.13, 0.32, 10).translate(0, -0.14, 0), shorts, 0, 0, 0), 1.05));
+    leg.add(outline(mesh(new THREE.CylinderGeometry(0.085, 0.07, 0.55, 8).translate(0, -0.55, 0), skin, 0, 0, 0), 1.08));
+    leg.add(outline(mesh(new THREE.BoxGeometry(0.16, 0.1, 0.3), shoe, 0, -0.86, -0.05), 1.08));
     legs.push(leg);
-    root.add(leg);
+    body.add(leg);
   }
-  const body = mesh(new THREE.CylinderGeometry(0.32, 0.38, 0.8, 16), shirt, 0, 1.1, 0);
-  const head = mesh(new THREE.SphereGeometry(0.27, 16, 12), skin, 0, 1.72, 0);
-  const hairM = mesh(new THREE.SphereGeometry(0.29, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.55), hair, 0, 1.75, 0.03);
-  const armGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.6, 8);
-  const armL = mesh(armGeo, skin, -0.42, 1.15, -0.05);
-  armL.rotation.z = 0.2;
-  const armR = mesh(armGeo, skin, 0.38, 1.35, -0.3);
-  armR.rotation.x = Math.PI / 2.4;
-  const shower = mesh(new THREE.CylinderGeometry(0.16, 0.1, 0.1, 16), showerMat, 0.38, 1.55, -0.62);
-  shower.rotation.x = Math.PI / 2;
+
+  // 胴体（Tシャツ）と肩にかけたバスタオル
+  const torso = outline(mesh(new THREE.CapsuleGeometry(0.27, 0.32, 6, 16), shirt, 0, 1.3, 0), 1.04);
+  torso.scale.set(1.1, 1, 0.8);
+  const towel = outline(mesh(new THREE.TorusGeometry(0.2, 0.07, 8, 20, Math.PI * 1.3), mat(0xffffff, { map: stripeTexture() }), 0, 1.6, 0.02), 1.06);
+  towel.rotation.set(Math.PI / 2, 0, Math.PI * 0.35);
+  body.add(torso, towel);
+
+  // 頭（髪・耳・顔）
+  const head = new THREE.Group();
+  head.position.set(0, 1.92, 0);
+  head.add(outline(mesh(new THREE.SphereGeometry(0.24, 18, 14), skin, 0, 0, 0)));
+  const hairBack = outline(mesh(new THREE.SphereGeometry(0.26, 18, 14, 0, Math.PI * 2, 0, Math.PI * 0.6), hair, 0, 0.03, 0.03));
+  hairBack.rotation.x = 0.35;
+  head.add(hairBack);
+  for (const sx of [-1, 1]) {
+    head.add(mesh(new THREE.SphereGeometry(0.06, 8, 6), skin, sx * 0.24, -0.02, 0));
+    // 顔（ゲームオーバーで振り向いたときに見える）: 怒り眉と目
+    head.add(mesh(new THREE.SphereGeometry(0.035, 8, 6), mat(0x231815), sx * 0.09, 0.0, -0.21));
+    const brow = mesh(new THREE.BoxGeometry(0.1, 0.025, 0.02), mat(0x231815), sx * 0.09, 0.08, -0.22);
+    brow.rotation.z = sx * 0.35;
+    head.add(brow);
+  }
+  const mouth = mesh(new THREE.SphereGeometry(0.05, 10, 8), mat(0x8a2a2a), 0, -0.1, -0.21);
+  mouth.scale.set(1.3, 0.8, 0.5);
+  head.add(mouth);
+  body.add(head);
+
+  // 腕: 右手はシャワーを前に突き出し、左手はシャンプーのボトルを持って振る
+  const arms: THREE.Group[] = [];
+  for (const sx of [-1, 1]) {
+    const arm = new THREE.Group();
+    arm.position.set(sx * 0.36, 1.55, 0);
+    arm.add(outline(mesh(new THREE.CylinderGeometry(0.1, 0.09, 0.2, 8).translate(0, -0.08, 0), shirt, 0, 0, 0), 1.06));
+    arm.add(outline(mesh(new THREE.CylinderGeometry(0.075, 0.065, 0.5, 8).translate(0, -0.35, 0), skin, 0, 0, 0), 1.08));
+    arms.push(arm);
+    body.add(arm);
+  }
+  const [armL, armR] = arms;
+  // シャワーヘッド（持ち手＋丸いヘッド）
+  const shower = new THREE.Group();
+  shower.position.set(0, -0.62, 0);
+  shower.add(outline(mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.22, 8), showerMat, 0, -0.05, 0), 1.1));
+  const headDisk = outline(mesh(new THREE.CylinderGeometry(0.13, 0.09, 0.07, 16), showerMat, 0, -0.18, -0.04), 1.08);
+  headDisk.rotation.x = 0.5;
+  shower.add(headDisk);
+  const nozzle = new THREE.Object3D();
+  nozzle.position.set(0, -0.22, -0.08);
+  shower.add(nozzle);
+  armR.add(shower);
+  // シャンプーボトル（ピンクのボトル＋ポンプ）
+  const bottle = new THREE.Group();
+  bottle.position.set(0, -0.62, 0);
+  bottle.add(outline(mesh(new THREE.CylinderGeometry(0.08, 0.09, 0.24, 12), mat(0xff8fb8), 0, 0, 0), 1.08));
+  bottle.add(mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.08, 6), mat(0xffffff), 0, 0.16, 0));
+  bottle.add(mesh(new THREE.BoxGeometry(0.08, 0.025, 0.025), mat(0xffffff), 0.03, 0.2, 0));
+  armL.add(bottle);
+
+  // 浴室から伸びてくるホース（後ろに引きずっている）
   const hosePath = new THREE.CatmullRomCurve3([
-    new THREE.Vector3(0.38, 1.5, -0.55),
-    new THREE.Vector3(0.6, 1.0, -0.2),
-    new THREE.Vector3(0.5, 0.4, 0.6),
-    new THREE.Vector3(0.3, 0.05, 1.6),
+    new THREE.Vector3(0.36, 1.0, -0.2),
+    new THREE.Vector3(0.55, 0.6, 0.3),
+    new THREE.Vector3(0.45, 0.1, 1.0),
+    new THREE.Vector3(0.3, 0.03, 3.0),
   ]);
-  const hose = new THREE.Mesh(new THREE.TubeGeometry(hosePath, 20, 0.04, 6), mat(0x8a97a6));
-  root.add(body, head, hairM, armL, armR, shower, hose, blobShadow(0.55));
-  return { root, legs, showerMat };
+  root.add(new THREE.Mesh(new THREE.TubeGeometry(hosePath, 24, 0.035, 6), mat(0x8a97a6)));
+  root.add(blobShadow(0.6));
+  return { root, body, legs, armL, armR, nozzle, showerMat };
+}
+
+/** アイテムの足元で光る輪（障害物と見分けやすくする） */
+function itemHalo(color: number): THREE.Mesh {
+  const m = new THREE.Mesh(
+    new THREE.RingGeometry(0.28, 0.4, 24).rotateX(-Math.PI / 2),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.55, depthWrite: false }),
+  );
+  m.position.y = 0.02;
+  m.name = 'halo';
+  return m;
 }
 
 function buildThing(kind: Thing['kind']): THREE.Group {
@@ -341,29 +417,62 @@ function buildThing(kind: Thing['kind']): THREE.Group {
       break;
     }
     case 'towel': {
-      const towel = mesh(new THREE.BoxGeometry(1.5, 0.3, 0.8), mat(0xffffff, { map: stripeTexture() }), 0, 0.15, 0);
-      g.add(towel, blobShadow(0.7));
+      // タオル掛けに干したバスタオル（ジャンプで飛び越える）
+      const metal = mat(0xb9c4cf);
+      for (const sx of [-1, 1]) g.add(outline(mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.62, 8), metal, sx * 0.62, 0.31, 0), 1.1));
+      const bar = outline(mesh(new THREE.CylinderGeometry(0.035, 0.035, 1.34, 8), metal, 0, 0.6, 0), 1.1);
+      bar.rotation.z = Math.PI / 2;
+      const cloth = mat(0xffffff, { map: stripeTexture(), side: THREE.DoubleSide });
+      const fold = outline(mesh(new THREE.CylinderGeometry(0.07, 0.07, 1.1, 12, 1, true), cloth, 0, 0.6, 0), 1.06);
+      fold.rotation.z = Math.PI / 2;
+      // バーの前後に垂れ下がる布と、すそのフリンジ
+      for (const sz of [-1, 1]) {
+        const panel = outline(mesh(new THREE.BoxGeometry(1.1, 0.42, 0.025), cloth, 0, 0.39, sz * 0.07), 1.04);
+        panel.rotation.x = sz * 0.12;
+        g.add(panel, mesh(new THREE.BoxGeometry(1.1, 0.04, 0.03), mat(0xf4a259), 0, 0.17, sz * 0.095));
+      }
+      g.add(bar, fold, blobShadow(0.7));
       break;
     }
     case 'potato': {
+      // 2つに割った焼き芋（断面の黄色と湯気）
       const inner = new THREE.Group();
-      const body = mesh(new THREE.SphereGeometry(0.25, 16, 12), mat(0x8e44ad), 0, 0, 0);
-      body.scale.set(1.8, 1, 1);
-      const yellow = mat(0xf6d365);
-      inner.add(body, mesh(new THREE.SphereGeometry(0.1, 8, 6), yellow, 0.42, 0, 0), mesh(new THREE.SphereGeometry(0.08, 8, 6), yellow, -0.42, 0, 0));
-      inner.position.y = 0.5;
+      const pts: THREE.Vector2[] = [];
+      for (let i = 0; i <= 8; i++) pts.push(new THREE.Vector2(0.02 + 0.15 * Math.pow(Math.sin((Math.PI / 2) * (i / 8)), 0.7), -0.32 + 0.32 * (i / 8)));
+      const halfGeo = new THREE.LatheGeometry(pts, 16);
+      const skinMat = mat(0x9b2d5f);
+      const flesh = mat(0xffd34d);
+      for (const sx of [-1, 1]) {
+        const half = new THREE.Group();
+        half.add(outline(mesh(halfGeo, skinMat, 0, 0, 0), 1.06));
+        half.add(mesh(new THREE.CircleGeometry(0.165, 16).rotateX(-Math.PI / 2), flesh, 0, 0.001, 0));
+        half.rotation.z = sx * (Math.PI / 2 - 0.25);
+        half.position.x = sx * 0.06;
+        inner.add(half);
+      }
+      for (let i = 0; i < 3; i++) {
+        const steam = mesh(new THREE.SphereGeometry(0.06 + i * 0.015, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.6 }), (i - 1) * 0.06, 0.2 + i * 0.12, 0);
+        steam.name = 'steam';
+        inner.add(steam);
+      }
+      inner.position.y = 0.45;
       inner.name = 'spin';
-      g.add(inner, blobShadow(0.4));
+      g.add(inner, itemHalo(0xffc93c), blobShadow(0.4));
       break;
     }
     case 'sasami': {
+      // 骨付き肉（ひと目で「ごほうびのお肉」とわかる形）
       const inner = new THREE.Group();
-      const s = mesh(new THREE.CapsuleGeometry(0.12, 0.5, 4, 10), mat(0xffe3e3), 0, 0, 0);
-      s.rotation.z = Math.PI / 2;
-      inner.add(s);
+      const meat = outline(mesh(new THREE.SphereGeometry(0.17, 14, 10), mat(0xd9895b), 0.06, 0, 0), 1.06);
+      meat.scale.set(1.4, 1, 1);
+      const boneMat = mat(0xfffaf0);
+      const bone = outline(mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.26, 8), boneMat, -0.25, 0, 0), 1.1);
+      bone.rotation.z = Math.PI / 2;
+      inner.add(meat, bone);
+      for (const sy of [-1, 1]) inner.add(outline(mesh(new THREE.SphereGeometry(0.055, 8, 6), boneMat, -0.38, sy * 0.04, 0), 1.1));
       inner.position.y = 0.45;
       inner.name = 'spin';
-      g.add(inner, blobShadow(0.35));
+      g.add(inner, itemHalo(0xff8fa3), blobShadow(0.35));
       break;
     }
   }
@@ -415,6 +524,11 @@ export class World {
   private tmp = new THREE.Object3D();
   private tmpColor = new THREE.Color();
   private tmpVec = new THREE.Vector3();
+  private tmpQuat = new THREE.Quaternion();
+  private spray: THREE.InstancedMesh;
+  private sprayDrops: { pos: THREE.Vector3; vel: THREE.Vector3; life: number }[] = [];
+  private sprayAcc = 0;
+  private lastOwnerT = 0;
   private width = 1;
   private height = 1;
   private lastT = 0;
@@ -455,6 +569,14 @@ export class World {
 
     this.scene.add(this.shiba.root, this.shiba.shadow, this.owner.root);
 
+    this.spray = new THREE.InstancedMesh(
+      new THREE.SphereGeometry(1, 6, 4),
+      new THREE.MeshBasicMaterial({ color: 0x7cc8ff, transparent: true, opacity: 0.75 }),
+      MAX_SPRAY,
+    );
+    this.spray.frustumCulled = false;
+    this.scene.add(this.spray);
+
     this.particles = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 6, 4), new THREE.MeshBasicMaterial(), MAX_PARTICLES);
     this.particles.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.particles.frustumCulled = false;
@@ -489,7 +611,8 @@ export class World {
     this.wallTexR.offset.x = -(dist / TILE) % 1;
 
     this.updateShiba(g, t);
-    this.updateOwner(g, t);
+    this.updateOwner(g, t, Math.min(0.1, t - this.lastOwnerT));
+    this.lastOwnerT = t;
     this.syncThings(g, t);
     this.syncSplashes(g, t);
     this.updateParticles(g.particles);
@@ -574,22 +697,69 @@ export class World {
     }
   }
 
-  private updateOwner(g: Game, t: number): void {
+  private updateOwner(g: Game, t: number, dt: number): void {
     const o = this.owner;
     o.root.visible = g.scene !== 'title';
+    let sprayRate = 25;
     if (g.scene === 'over') {
-      // 捕まえたら柴の横に立ってシャワーを向ける（柴が隠れないように）
+      // 捕まえたら柴の横に立ってシャワーを浴びせる（柴が隠れないように）
       const side = g.x > W / 2 ? -1 : 1;
-      o.root.position.set(wx(g.x) + side * 1.0, 0, 0.2);
+      o.root.position.set(wx(g.x) + side * 1.1, 0, 0.2);
       o.root.rotation.y = side * Math.PI / 2;
       o.legs.forEach((leg) => (leg.rotation.x = 0));
+      o.armR.rotation.x = 1.0;
+      o.armL.rotation.x = 0.4 + Math.sin(t * 12) * 0.3;
       o.showerMat.emissive.setRGB(0.6, 0.8, 1);
-      return;
+      sprayRate = 70;
+    } else {
+      o.root.rotation.y = 0;
+      o.root.position.set(wx(g.ownerX), Math.abs(Math.sin(t * 7)) * 0.1, wz(g.ownerY));
+      // 腕と脚を交互に振って走る。右手のシャワーは柴に向けたまま
+      o.legs.forEach((leg, i) => (leg.rotation.x = Math.sin(t * 14 + i * Math.PI) * 0.7));
+      o.armL.rotation.x = Math.sin(t * 14) * 0.8;
+      o.armR.rotation.x = 1.35 + Math.sin(t * 14) * 0.08;
+      const aiming = g.ownerAim > 0;
+      o.showerMat.emissive.setRGB(aiming ? 0.6 : 0, aiming ? 0.8 : 0, aiming ? 1 : 0);
+      if (aiming) sprayRate = 90;
     }
-    o.root.rotation.y = 0;
-    o.root.position.set(wx(g.ownerX), Math.abs(Math.sin(t * 7)) * 0.08, wz(g.ownerY));
-    o.legs.forEach((leg, i) => (leg.rotation.x = Math.sin(t * 14 + i * Math.PI) * 0.6));
-    o.showerMat.emissive.setRGB(g.ownerAim > 0 ? 0.6 : 0, g.ownerAim > 0 ? 0.8 : 0, g.ownerAim > 0 ? 1 : 0);
+    this.updateSpray(o.root.visible ? sprayRate : 0, dt, g.scene === 'over' ? 0.45 : 1);
+  }
+
+  /** シャワーから出続ける水（見た目だけ。当たり判定はゲームロジック側の水しぶき） */
+  private updateSpray(rate: number, dt: number, power: number): void {
+    const o = this.owner;
+    this.sprayAcc += rate * dt;
+    o.root.updateMatrixWorld();
+    const origin = o.nozzle.getWorldPosition(this.tmpVec);
+    const q = o.root.getWorldQuaternion(this.tmpQuat);
+    while (this.sprayAcc >= 1) {
+      this.sprayAcc -= 1;
+      const drop = this.sprayDrops.find((d) => d.life <= 0) ?? (this.sprayDrops.length < MAX_SPRAY ? this.newDrop() : null);
+      if (!drop) break;
+      drop.pos.copy(origin);
+      drop.vel.set((Math.random() - 0.5) * 1.2, 0.6 + Math.random() * 0.8, (-4.5 - Math.random() * 1.5) * power).applyQuaternion(q);
+      drop.life = 0.45 + Math.random() * 0.2;
+    }
+    let n = 0;
+    for (const d of this.sprayDrops) {
+      if (d.life <= 0) continue;
+      d.life -= dt;
+      d.vel.y -= 9 * dt;
+      d.pos.addScaledVector(d.vel, dt);
+      if (d.pos.y < 0.02) d.life = 0;
+      this.tmp.position.copy(d.pos);
+      this.tmp.scale.setScalar(0.045);
+      this.tmp.updateMatrix();
+      this.spray.setMatrixAt(n++, this.tmp.matrix);
+    }
+    this.spray.count = n;
+    this.spray.instanceMatrix.needsUpdate = true;
+  }
+
+  private newDrop() {
+    const d = { pos: new THREE.Vector3(), vel: new THREE.Vector3(), life: 0 };
+    this.sprayDrops.push(d);
+    return d;
   }
 
   private syncThings(g: Game, t: number): void {
@@ -610,9 +780,15 @@ export class World {
       obj.position.set(wx(laneX(thing.lane)), 0, wz(thing.y));
       const spin = obj.getObjectByName('spin');
       if (spin) {
-        spin.rotation.y = t * 3;
+        spin.rotation.y = t * 2;
         spin.position.y = 0.5 + Math.sin(t * 4 + thing.y) * 0.08;
+        // 焼き芋の湯気がゆらゆら上がる
+        spin.children.forEach((c, i) => {
+          if (c.name === 'steam') c.position.y = 0.2 + ((t * 0.5 + i * 0.33) % 1) * 0.4;
+        });
       }
+      const halo = obj.getObjectByName('halo');
+      if (halo) halo.scale.setScalar(1 + Math.sin(t * 6) * 0.12);
     }
   }
 

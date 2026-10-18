@@ -12,6 +12,8 @@ export interface Thing {
   lane: number;
   y: number;
   done: boolean;
+  /** 初登場なので説明ラベルを出す */
+  hint?: boolean;
 }
 
 export interface Splash {
@@ -20,6 +22,7 @@ export interface Splash {
   wide: boolean; // 3レーンを覆う大波
   warn: number; // 発射前の予告時間
   done: boolean;
+  hint?: boolean;
 }
 
 /** x, y は地面上の位置、h は高さ（いずれも px） */
@@ -31,7 +34,7 @@ export interface Particle {
 export interface Popup { x: number; text: string; life: number; color: string }
 
 /** 跳び越えるのに必要な高さ */
-const CLEAR_HEIGHT: Record<ObstacleKind, number> = { bucket: 30, soap: 6, towel: 18 };
+const CLEAR_HEIGHT: Record<ObstacleKind, number> = { bucket: 30, soap: 6, towel: 26 };
 const OBSTACLES: ObstacleKind[] = ['bucket', 'soap', 'towel'];
 const isObstacle = (k: Thing['kind']): k is ObstacleKind => (OBSTACLES as string[]).includes(k);
 
@@ -93,6 +96,11 @@ export class Game {
   viewSkin = Math.max(0, SKINS.findIndex((s) => s.id === this.save.skin));
   /** この回に拾ったささみの数 */
   runSasami = 0;
+  /** 飼い主のセリフ（吹き出し） */
+  shout = '';
+  shoutT = 0;
+  nextShout = 0;
+
   /** タイトル画面の一言メッセージ */
   titleMsg = '';
   titleMsgT = 0;
@@ -140,7 +148,9 @@ export class Game {
       boostT: 0, stumbleT: 0, slipT: 0, blindT: 0, wetT: 0, drillT: 0, drillCd: 0,
       things: [], splashes: [], particles: [], popups: [],
       nextRow: 200, nextShot: 3, potatoCd: 4, overT: 0, shake: 0, runSasami: 0,
+      nextShout: 8,
     });
+    this.say('こら〜！お風呂だよ！', 2.8);
     this.viewSkin = Math.max(0, SKINS.findIndex((s) => s.id === this.save.skin));
     this.sounds.push('start');
   }
@@ -280,6 +290,15 @@ export class Game {
       this.nextShot = Math.max(1.3, 3.2 - this.time * 0.02) + rand(0, 1.0);
     }
     this.ownerAim = Math.max(0, this.ownerAim - dt);
+    this.shoutT = Math.max(0, this.shoutT - dt);
+    this.nextShout -= dt;
+    if (this.nextShout <= 0) {
+      const lines = this.gap < 30
+        ? ['つかまえた〜！…あれ？', 'もうすぐだぞ〜！', 'シャンプーするよ〜！']
+        : ['まて〜っ！', '逃げるな〜！', 'シャンプーするだけ！', 'いい子だから〜'];
+      this.say(lines[Math.floor(Math.random() * lines.length)]);
+      this.nextShout = rand(6, 10);
+    }
     for (const s of this.splashes) {
       if (s.warn > 0) {
         s.warn -= dt;
@@ -297,13 +316,26 @@ export class Game {
     if (this.gap <= 0) this.gameOver();
   }
 
+  private say(text: string, dur = 2): void {
+    this.shout = text;
+    this.shoutT = dur;
+  }
+
+  /** 初めて出てきた種類なら説明ラベルを出す（1台につき1回） */
+  private firstTime(kind: string): boolean {
+    if (this.save.seen.includes(kind)) return false;
+    this.save.seen.push(kind);
+    writeSave(this.save);
+    return true;
+  }
+
   private spawnRow(): void {
     const lanes = [0, 1, 2].sort(() => Math.random() - 0.5);
     const n = Math.random() < 0.3 + Math.min(0.35, this.time * 0.005) ? 2 : 1;
     for (let i = 0; i < n; i++) {
       const r = Math.random();
       const kind: ObstacleKind = r < 0.45 ? 'bucket' : r < 0.75 ? 'soap' : 'towel';
-      this.things.push({ kind, lane: lanes[i], y: SPAWN_Y, done: false });
+      this.things.push({ kind, lane: lanes[i], y: SPAWN_Y, done: false, hint: this.firstTime(kind) });
     }
     if (Math.random() < 0.5) {
       let kind: ItemKind = 'sasami';
@@ -311,13 +343,17 @@ export class Game {
         kind = 'potato';
         this.potatoCd = 6;
       }
-      this.things.push({ kind, lane: lanes[n], y: SPAWN_Y, done: false });
+      this.things.push({ kind, lane: lanes[n], y: SPAWN_Y, done: false, hint: this.firstTime(kind) });
     }
   }
 
   private fire(): void {
     const wide = this.time > CFG.waveStartTime && Math.random() < 0.3;
-    this.splashes.push({ lane: this.lane, y: this.ownerY - 20, wide, warn: wide ? 0.8 : 0.35, done: false });
+    this.splashes.push({
+      lane: this.lane, y: this.ownerY - 20, wide, warn: wide ? 0.8 : 0.35, done: false,
+      hint: this.firstTime(wide ? 'wave' : 'splash'),
+    });
+    if (wide) this.say('それ〜っ！', 1.5);
     this.ownerAim = wide ? 0.8 : 0.35;
   }
 
@@ -359,6 +395,7 @@ export class Game {
       if (this.drillT > 0 && inLane && Math.abs(s.y - sy) < CFG.drillRadius) {
         s.done = true;
         this.popup('はじいた!', '#3fa7ff');
+        if (Math.random() < 0.4) this.say('あっ、こら！', 1.2);
         this.sounds.push('deflect');
         this.burst(s.wide ? W / 2 : laneX(s.lane), s.y, s.wide ? 24 : 12, '#7cc8ff', 260);
         this.bonus += 30;

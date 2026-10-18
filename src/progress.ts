@@ -21,19 +21,22 @@ export interface SaveData {
   sasami: number;
   unlocked: string[];
   skin: string;
+  /** 説明ラベルを出し終えたもの（初めて出てきたときだけ説明する） */
+  seen: string[];
 }
 
 const KEY = 'shiba-run-save';
 
 export function loadSave(): SaveData {
-  const fallback: SaveData = { sasami: 0, unlocked: ['red'], skin: 'red' };
+  const fallback: SaveData = { sasami: 0, unlocked: ['red'], skin: 'red', seen: [] };
   try {
     const d = JSON.parse(localStorage.getItem(KEY) ?? 'null') as Partial<SaveData> | null;
     if (!d) return fallback;
     const unlocked = Array.isArray(d.unlocked) ? d.unlocked.filter((id) => SKINS.some((s) => s.id === id)) : [];
     if (!unlocked.includes('red')) unlocked.unshift('red');
     const skin = typeof d.skin === 'string' && unlocked.includes(d.skin) ? d.skin : 'red';
-    return { sasami: Math.max(0, Math.floor(Number(d.sasami) || 0)), unlocked, skin };
+    const seen = Array.isArray(d.seen) ? d.seen.filter((k) => typeof k === 'string') : [];
+    return { sasami: Math.max(0, Math.floor(Number(d.sasami) || 0)), unlocked, skin, seen };
   } catch {
     return fallback;
   }
