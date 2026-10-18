@@ -115,6 +115,7 @@ interface ShibaParts {
   towel: THREE.Mesh;
   ring: THREE.Mesh;
   furMats: THREE.MeshToonMaterial[];
+  creamMat: THREE.MeshToonMaterial;
 }
 
 const OUTLINE = new THREE.MeshBasicMaterial({ color: 0x4a2a14, side: THREE.BackSide });
@@ -270,7 +271,7 @@ function buildShiba(): ShibaParts {
   root.add(ring);
 
   const shadow = blobShadow(0.45 * SHIBA_SCALE);
-  return { root, spin, legs, head, ears, tail, eyes, shadow, towel, ring, furMats: [fur, furDark] };
+  return { root, spin, legs, head, ears, tail, eyes, shadow, towel, ring, furMats: [fur, furDark], creamMat: cream };
 }
 
 interface OwnerParts {
@@ -417,6 +418,7 @@ export class World {
   private width = 1;
   private height = 1;
   private lastT = 0;
+  private skinId = '';
   private titleBlend = 1;
 
   constructor(canvas: HTMLCanvasElement) {
@@ -511,6 +513,13 @@ export class World {
 
   private updateShiba(g: Game, t: number): void {
     const s = this.shiba;
+    const skin = g.skin;
+    if (skin.id !== this.skinId) {
+      this.skinId = skin.id;
+      s.furMats[0].color.set(skin.fur);
+      s.furMats[1].color.set(skin.furDark);
+      s.creamMat.color.set(skin.cream);
+    }
     const x = wx(g.x);
     const y = g.z * U;
     s.root.position.set(x, y, 0);

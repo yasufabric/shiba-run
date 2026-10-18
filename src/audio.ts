@@ -5,7 +5,8 @@
 
 export type Sfx =
   | 'jump' | 'drill' | 'bucket' | 'slip' | 'towel' | 'wet'
-  | 'sasami' | 'potato' | 'smash' | 'deflect' | 'gameover' | 'start';
+  | 'sasami' | 'potato' | 'smash' | 'deflect' | 'gameover' | 'start'
+  | 'select' | 'unlock';
 
 const MUTE_KEY = 'shiba-run-muted';
 const MASTER_VOLUME = 0.65;
@@ -368,6 +369,12 @@ class Engine {
       case 'deflect':
         this.mallet(88, t, 0.1);
         this.mallet(95, t + 0.06, 0.25);
+        break;
+      case 'select':
+        this.mallet(79, t, 0.12);
+        break;
+      case 'unlock':
+        [72, 76, 79, 84, 88, 91].forEach((n, i) => this.mallet(n, t + i * 0.07, 0.25));
         break;
       case 'start':
         [72, 79, 84].forEach((n, i) => this.mallet(n, t + i * 0.08, 0.2));

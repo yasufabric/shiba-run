@@ -1,7 +1,7 @@
 import { W } from './config';
 import { Game } from './game';
 import { Sound } from './audio';
-import { drawHudLayer, drillButton, muteButton } from './hud';
+import { drawHudLayer, drillButton, inCircle, inRect, menuButtons, muteButton } from './hud';
 import { Input } from './input';
 import { World } from './world';
 
@@ -42,11 +42,63 @@ const input = new Input(
   },
   (x, y) => {
     if (Math.hypot(x - muteButton.x, y - muteButton.y) < muteButton.r + 10) return 'mute';
+    const ui = menuButtons(H);
+    if (game.scene === 'title') {
+      if (inCircle(ui.prevSkin, x, y)) return 'prevSkin';
+      if (inCircle(ui.nextSkin, x, y)) return 'nextSkin';
+      if (!game.isUnlocked(game.viewSkin) && inRect(ui.unlock, x, y)) return 'unlock';
+    }
+    if (game.scene === 'over' && game.overT > 0.8) {
+      if (inRect(ui.share, x, y)) return 'share';
+      if (inRect(ui.toTitle, x, y)) return 'toTitle';
+    }
     const b = drillButton(H);
     if (game.scene === 'playing' && Math.hypot(x - b.x, y - b.y) < b.r + 8) return 'drill';
     return null;
   },
 );
+
+// ---- 結果のシェア ----
+const SITE_URL = 'https://yasufabric.github.io/shiba-run/';
+/** リザルト画面のスクリーンショット（シェア画像に使う） */
+let shareImage: File | null = null;
+let snapshotTaken = false;
+
+/** 描画直後のキャンバスを1枚の画像にまとめておく（WebGLは描画直後でないと読めない） */
+function takeSnapshot(): void {
+  const c = document.createElement('canvas');
+  c.width = hudCanvas.width;
+  c.height = hudCanvas.height;
+  const g = c.getContext('2d')!;
+  g.drawImage(glCanvas, 0, 0, c.width, c.height);
+  g.drawImage(hudCanvas, 0, 0);
+  c.toBlob((blob) => {
+    if (blob) shareImage = new File([blob], 'shiba-run.png', { type: 'image/png' });
+  }, 'image/png');
+}
+
+/** タップ中に呼ぶ（共有シートはユーザー操作の中でしか開けない） */
+function shareResult(): void {
+  const text = `お風呂から${game.meters}m逃げたけど、つかまってシャンプーされた… スコア${game.score} #シバラン`;
+  const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
+  const withImage: ShareData = { text, url: SITE_URL, files: shareImage ? [shareImage] : [] };
+  if (nav.share) {
+    const data = shareImage && nav.canShare?.(withImage) ? withImage : { text, url: SITE_URL };
+    nav.share(data).catch(() => {
+      // キャンセルされたときなどは何もしない
+    });
+    return;
+  }
+  // 共有シートがないPCなどは X の投稿画面を開く
+  const intent = `https://x.com/intent/post?text=${encodeURIComponent(text)}&url=${encodeURIComponent(SITE_URL)}`;
+  window.open(intent, '_blank', 'noopener');
+}
+
+hudCanvas.addEventListener('pointerdown', (e) => {
+  if (game.scene !== 'over' || game.overT <= 0.8) return;
+  const r = hudCanvas.getBoundingClientRect();
+  if (inRect(menuButtons(H).share, (e.clientX - r.left) / scale, (e.clientY - r.top) / scale)) shareResult();
+});
 
 // ブラウザの制約で、音はユーザー操作のイベント内でしか鳴らし始められない
 const unlockAudio = () => {
@@ -82,6 +134,16 @@ function frame(now: number): void {
   }
   world.render(game);
   drawHudLayer(hud, game, H, sound.muted, toHud);
+  if (game.scene === 'over') {
+    // ボタンが出る直前の結果画面を撮っておく
+    if (!snapshotTaken && game.overT > 0.6) {
+      snapshotTaken = true;
+      takeSnapshot();
+    }
+  } else {
+    snapshotTaken = false;
+    shareImage = null;
+  }
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

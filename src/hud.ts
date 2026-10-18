@@ -1,5 +1,6 @@
 import { CFG, W } from './config';
 import type { Game } from './game';
+import { SKINS } from './progress';
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -78,40 +79,84 @@ function drawHud(ctx: Ctx, g: Game, H: number): void {
   text(ctx, 'ドリル', b.x, b.y + 12, 12, '#ffffff');
 }
 
+type Rect = { x: number; y: number; w: number; h: number };
+type Circle = { x: number; y: number; r: number };
+
+/** タイトル・リザルト画面のボタン配置（論理座標） */
+export const menuButtons = (H: number) => ({
+  prevSkin: { x: W / 2 - 128, y: H * 0.58, r: 24 } as Circle,
+  nextSkin: { x: W / 2 + 128, y: H * 0.58, r: 24 } as Circle,
+  unlock: { x: W / 2 - 115, y: H * 0.83, w: 230, h: 44 } as Rect,
+  share: { x: W / 2 - 110, y: H * 0.63, w: 220, h: 48 } as Rect,
+  toTitle: { x: W / 2 - 80, y: H * 0.72, w: 160, h: 38 } as Rect,
+});
+
+export const inRect = (r: Rect, x: number, y: number) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+export const inCircle = (c: Circle, x: number, y: number) => Math.hypot(x - c.x, y - c.y) <= c.r + 8;
+
+function button(ctx: Ctx, r: Rect, label: string, color: string, size = 17): void {
+  roundRect(ctx, r.x, r.y + 3, r.w, r.h, r.h / 2, 'rgba(0,0,0,0.25)');
+  roundRect(ctx, r.x, r.y, r.w, r.h, r.h / 2, color);
+  text(ctx, label, r.x + r.w / 2, r.y + r.h / 2, size, '#ffffff');
+}
+
+function arrow(ctx: Ctx, c: Circle, dir: number): void {
+  ellipse(ctx, c.x, c.y, c.r, c.r, 'rgba(25,40,60,0.6)');
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.moveTo(c.x + dir * 9, c.y);
+  ctx.lineTo(c.x - dir * 6, c.y - 10);
+  ctx.lineTo(c.x - dir * 6, c.y + 10);
+  ctx.fill();
+}
+
 function drawOverlay(ctx: Ctx, g: Game, H: number): void {
   // 柴が見えるよう、下に行くほど暗幕を薄くする
   const shade = ctx.createLinearGradient(0, 0, 0, H);
   shade.addColorStop(0, 'rgba(20,30,50,0.7)');
-  shade.addColorStop(0.55, 'rgba(20,30,50,0.55)');
-  shade.addColorStop(0.75, 'rgba(20,30,50,0.1)');
-  shade.addColorStop(1, 'rgba(20,30,50,0.35)');
+  shade.addColorStop(0.42, 'rgba(20,30,50,0.55)');
+  shade.addColorStop(0.55, 'rgba(20,30,50,0.1)');
+  shade.addColorStop(1, 'rgba(20,30,50,0.4)');
   ctx.fillStyle = shade;
   ctx.fillRect(0, 0, W, H);
+  const ui = menuButtons(H);
   if (g.scene === 'title') {
-    text(ctx, 'シバラン', W / 2, H * 0.16, 48, '#ffb35c');
-    text(ctx, '〜シャンプーいやや〜', W / 2, H * 0.16 + 46, 18, '#ffffff');
+    text(ctx, `ささみ ×${g.save.sasami}`, 20, 28, 15, '#ffd0d8', 'left');
+    text(ctx, 'シバラン', W / 2, H * 0.12, 48, '#ffb35c');
+    text(ctx, '〜シャンプーいやや〜', W / 2, H * 0.12 + 44, 18, '#ffffff');
     const lines = [
       '← → スワイプ：レーン移動',
-      '↑ スワイプ / タップ：ジャンプ',
-      '↓ スワイプ / 右下ボタン：柴ドリル',
-      '',
-      'バケツ：ぶつかると転ぶ',
-      '石けん：踏むと滑る',
-      'タオル：前が見えなくなる',
-      'さつまいも：猛ダッシュ＆無敵',
-      `ささみ：ボーナス +${CFG.sasamiBonus}`,
-      'シャワーは柴ドリルで弾け！',
+      '↑ スワイプ・タップ：ジャンプ',
+      '↓ スワイプ・右下ボタン：柴ドリル',
+      'さつまいもで無敵、ささみを集めて柴を解放',
     ];
-    lines.forEach((l, i) => text(ctx, l, W / 2, H * 0.28 + i * 23, 14, '#ffffff', 'center'));
-    if (Math.floor(performance.now() / 500) % 2 === 0) text(ctx, 'タップでスタート', W / 2, H * 0.88, 22, '#ffffff');
+    lines.forEach((l, i) => text(ctx, l, W / 2, H * 0.25 + i * 22, 14, '#ffffff'));
+
+    // 柴えらび
+    arrow(ctx, ui.prevSkin, -1);
+    arrow(ctx, ui.nextSkin, 1);
+    const skin = g.skin;
+    if (g.isUnlocked(g.viewSkin)) {
+      text(ctx, skin.name, W / 2, ui.unlock.y + ui.unlock.h / 2, 22, '#ffffff');
+    } else {
+      const enough = g.save.sasami >= skin.cost;
+      button(ctx, ui.unlock, `${skin.name}を解放（ささみ×${skin.cost}）`, enough ? '#e8763a' : '#6b7684', 15);
+    }
+    if (g.titleMsgT > 0) text(ctx, g.titleMsg, W / 2, ui.unlock.y - 16, 14, '#ffe08a');
+    if (Math.floor(performance.now() / 500) % 2 === 0) {
+      text(ctx, g.isUnlocked(g.viewSkin) ? 'タップでスタート' : `タップで${SKINS.find((s) => s.id === g.save.skin)?.name ?? ''}でスタート`, W / 2, H * 0.94, 18, '#ffffff');
+    }
   } else {
-    text(ctx, 'つかまった…', W / 2, H * 0.22, 36, '#9fd8ff');
-    text(ctx, 'シャンプーの刑', W / 2, H * 0.22 + 42, 18, '#ffffff');
-    text(ctx, `${g.score}`, W / 2, H * 0.4, 56, '#ffffff');
-    text(ctx, `${g.meters} m  + ボーナス ${g.bonus}`, W / 2, H * 0.4 + 44, 14, '#ffffff', 'center');
-    text(ctx, g.newBest ? 'ハイスコア更新！' : `BEST ${g.best}`, W / 2, H * 0.54, 20, '#ffe08a');
-    if (g.overT > 0.8 && Math.floor(performance.now() / 500) % 2 === 0) {
-      text(ctx, 'タップでリトライ', W / 2, H * 0.86, 22, '#ffffff');
+    text(ctx, 'つかまった…', W / 2, H * 0.17, 36, '#9fd8ff');
+    text(ctx, 'シャンプーの刑', W / 2, H * 0.17 + 40, 18, '#ffffff');
+    text(ctx, `${g.score}`, W / 2, H * 0.33, 56, '#ffffff');
+    text(ctx, `${g.meters} m  + ボーナス ${g.bonus}`, W / 2, H * 0.33 + 42, 14, '#ffffff');
+    text(ctx, g.newBest ? 'ハイスコア更新！' : `BEST ${g.best}`, W / 2, H * 0.47, 20, '#ffe08a');
+    text(ctx, `ささみ +${g.runSasami}（所持 ${g.save.sasami}）`, W / 2, H * 0.53, 15, '#ffd0d8');
+    if (g.overT > 0.8) {
+      button(ctx, ui.share, '結果をシェア', '#1d9bf0');
+      button(ctx, ui.toTitle, '柴をえらぶ', '#e8763a', 15);
+      if (Math.floor(performance.now() / 500) % 2 === 0) text(ctx, 'タップでリトライ', W / 2, H * 0.88, 22, '#ffffff');
     }
   }
 }

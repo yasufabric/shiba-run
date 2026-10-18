@@ -1,6 +1,7 @@
 import { CFG, LANES, OWNER_OFFSET, OWNER_SPAN, SHIBA_Y, SPAWN_Y, W, laneX } from './config';
 import type { Sfx } from './audio';
 import type { Action } from './input';
+import { SKINS, loadSave, writeSave, type SaveData } from './progress';
 
 export type ObstacleKind = 'bucket' | 'soap' | 'towel';
 export type ItemKind = 'potato' | 'sasami';
@@ -86,6 +87,26 @@ export class Game {
   /** このフレームで鳴らす効果音（main 側で取り出して再生する） */
   sounds: Sfx[] = [];
 
+  /** 着せかえとささみの所持数（端末に保存） */
+  save: SaveData = loadSave();
+  /** タイトル画面で表示している柴（未解放のものも眺められる） */
+  viewSkin = Math.max(0, SKINS.findIndex((s) => s.id === this.save.skin));
+  /** この回に拾ったささみの数 */
+  runSasami = 0;
+  /** タイトル画面の一言メッセージ */
+  titleMsg = '';
+  titleMsgT = 0;
+
+  /** いま描画に使う柴の毛色 */
+  get skin() {
+    if (this.scene === 'title') return SKINS[this.viewSkin];
+    return SKINS.find((s) => s.id === this.save.skin) ?? SKINS[0];
+  }
+
+  isUnlocked(i: number): boolean {
+    return this.save.unlocked.includes(SKINS[i].id);
+  }
+
   get shibaY(): number { return SHIBA_Y; }
   get ownerY(): number {
     return SHIBA_Y + OWNER_OFFSET + (this.gap / CFG.gapMax) * OWNER_SPAN;
@@ -118,18 +139,22 @@ export class Game {
       lane: 1, x: laneX(1), z: 0, jumpT: -1, gap: CFG.gapStart, ownerX: laneX(1),
       boostT: 0, stumbleT: 0, slipT: 0, blindT: 0, wetT: 0, drillT: 0, drillCd: 0,
       things: [], splashes: [], particles: [], popups: [],
-      nextRow: 200, nextShot: 3, potatoCd: 4, overT: 0, shake: 0,
+      nextRow: 200, nextShot: 3, potatoCd: 4, overT: 0, shake: 0, runSasami: 0,
     });
+    this.viewSkin = Math.max(0, SKINS.findIndex((s) => s.id === this.save.skin));
     this.sounds.push('start');
   }
 
   handle(a: Action): void {
     if (this.scene === 'title') {
-      this.start();
+      this.handleTitle(a);
       return;
     }
     if (this.scene === 'over') {
-      if (this.overT > 0.8) this.start();
+      // シェアは main 側でタップ中に直接処理する（ブラウザの制約）
+      if (a === 'share' || this.overT < 0.8) return;
+      if (a === 'toTitle') this.goTitle();
+      else this.start();
       return;
     }
     switch (a) {
@@ -157,8 +182,59 @@ export class Game {
     }
   }
 
+  /** タイトル画面: 左右で柴を選び、未解放ならささみで解放、それ以外の操作でスタート */
+  private handleTitle(a: Action): void {
+    switch (a) {
+      case 'left':
+      case 'prevSkin':
+      case 'right':
+      case 'nextSkin': {
+        const d = a === 'left' || a === 'prevSkin' ? -1 : 1;
+        this.viewSkin = (this.viewSkin + d + SKINS.length) % SKINS.length;
+        if (this.isUnlocked(this.viewSkin)) {
+          this.save.skin = SKINS[this.viewSkin].id;
+          writeSave(this.save);
+        }
+        this.titleMsg = '';
+        this.sounds.push('select');
+        return;
+      }
+      case 'unlock': {
+        const skin = SKINS[this.viewSkin];
+        if (this.isUnlocked(this.viewSkin)) return;
+        if (this.save.sasami < skin.cost) {
+          this.titleMsg = `ささみが あと${skin.cost - this.save.sasami}本 たりない…`;
+          this.titleMsgT = 2;
+          this.sounds.push('towel');
+          return;
+        }
+        this.save.sasami -= skin.cost;
+        this.save.unlocked.push(skin.id);
+        this.save.skin = skin.id;
+        writeSave(this.save);
+        this.titleMsg = `${skin.name} を解放した！`;
+        this.titleMsgT = 2;
+        this.sounds.push('unlock');
+        return;
+      }
+      case 'share':
+      case 'toTitle':
+        return;
+      default:
+        this.start();
+    }
+  }
+
+  /** タイトル（柴の着せかえ画面）に戻る */
+  private goTitle(): void {
+    this.scene = 'title';
+    this.viewSkin = Math.max(0, SKINS.findIndex((s) => s.id === this.save.skin));
+    this.titleMsg = '';
+  }
+
   update(dt: number): void {
     this.updateEffects(dt);
+    this.titleMsgT = Math.max(0, this.titleMsgT - dt);
     if (this.scene !== 'playing') {
       this.overT += dt;
       return;
@@ -252,6 +328,7 @@ export class Game {
       if (t.kind === 'sasami') {
         t.done = true;
         this.bonus += CFG.sasamiBonus;
+        this.runSasami++;
         this.popup(`+${CFG.sasamiBonus}`, '#ff8fa3');
         this.sounds.push('sasami');
         this.burst(this.x, sy, 8, '#ffd0d8', 120);
@@ -334,6 +411,8 @@ export class Game {
     this.overT = 0;
     this.shake = 0.4;
     this.sounds.push('gameover');
+    this.save.sasami += this.runSasami;
+    writeSave(this.save);
     this.burst(this.x, this.shibaY, 30, '#9fd8ff', 260);
     this.burst(this.x, this.shibaY, 20, '#ffffff', 160); // シャンプーの泡
     if (this.score > this.best) {
