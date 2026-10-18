@@ -1,4 +1,4 @@
-export type Action = 'left' | 'right' | 'jump' | 'drill' | 'tap';
+export type Action = 'left' | 'right' | 'jump' | 'drill' | 'tap' | 'mute';
 
 const SWIPE_PX = 24;
 
@@ -14,7 +14,8 @@ export class Input {
   constructor(
     canvas: HTMLCanvasElement,
     private toLogical: (clientX: number, clientY: number) => { x: number; y: number },
-    private hitDrillButton: (x: number, y: number) => boolean,
+    /** 画面上のボタンに当たっていればそのアクションを返す */
+    private hitButton: (x: number, y: number) => Action | null,
   ) {
     canvas.addEventListener('pointerdown', (e) => this.onDown(e));
     canvas.addEventListener('pointermove', (e) => this.onMove(e));
@@ -28,8 +29,9 @@ export class Input {
     e.preventDefault();
     if (this.pointerId !== null) return;
     const p = this.toLogical(e.clientX, e.clientY);
-    if (this.hitDrillButton(p.x, p.y)) {
-      this.queue.push('drill');
+    const button = this.hitButton(p.x, p.y);
+    if (button) {
+      this.queue.push(button);
       return;
     }
     this.pointerId = e.pointerId;
@@ -64,6 +66,7 @@ export class Input {
       ArrowUp: 'jump', KeyW: 'jump', Space: 'jump',
       ArrowDown: 'drill', KeyS: 'drill', ShiftLeft: 'drill', ShiftRight: 'drill',
       Enter: 'tap',
+      KeyM: 'mute',
     };
     const a = map[e.code];
     if (a) {

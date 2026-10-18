@@ -1,6 +1,7 @@
 import { W } from './config';
 import { Game } from './game';
-import { drawHudLayer, drillButton } from './hud';
+import { Sound } from './audio';
+import { drawHudLayer, drillButton, muteButton } from './hud';
 import { Input } from './input';
 import { World } from './world';
 
@@ -10,6 +11,7 @@ const hudCanvas = document.getElementById('hud') as HTMLCanvasElement;
 const hud = hudCanvas.getContext('2d')!;
 const game = new Game();
 const world = new World(glCanvas);
+const sound = new Sound();
 let scale = 1;
 let H = 640;
 
@@ -39,11 +41,20 @@ const input = new Input(
     return { x: (cx - r.left) / scale, y: (cy - r.top) / scale };
   },
   (x, y) => {
-    if (game.scene !== 'playing') return false;
+    if (Math.hypot(x - muteButton.x, y - muteButton.y) < muteButton.r + 10) return 'mute';
     const b = drillButton(H);
-    return Math.hypot(x - b.x, y - b.y) < b.r + 8;
+    if (game.scene === 'playing' && Math.hypot(x - b.x, y - b.y) < b.r + 8) return 'drill';
+    return null;
   },
 );
+
+// ブラウザの制約で、音はユーザー操作のイベント内でしか鳴らし始められない
+const unlockAudio = () => {
+  sound.unlock();
+  if (game.scene !== 'over') sound.startBgm();
+};
+window.addEventListener('pointerdown', unlockAudio);
+window.addEventListener('keydown', unlockAudio);
 
 const toHud = (x: number, h: number, y: number) => {
   const p = world.project(x, h, y);
@@ -54,10 +65,23 @@ let last = performance.now();
 function frame(now: number): void {
   const dt = Math.min(1 / 30, (now - last) / 1000);
   last = now;
-  while (input.queue.length) game.handle(input.queue.shift()!);
+  while (input.queue.length) {
+    const a = input.queue.shift()!;
+    if (a === 'mute') sound.toggleMute();
+    else game.handle(a);
+  }
+  const wasPlaying = game.scene === 'playing';
   game.update(dt);
+  for (const s of game.sounds) sound.play(s);
+  game.sounds.length = 0;
+  if (game.scene === 'playing') {
+    if (!wasPlaying) sound.startBgm();
+    sound.tempo = 140 + Math.min(40, game.time * 0.4); // 走るほど曲も速くなる
+  } else if (game.scene === 'over') {
+    sound.stopBgm();
+  }
   world.render(game);
-  drawHudLayer(hud, game, H, toHud);
+  drawHudLayer(hud, game, H, sound.muted, toHud);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

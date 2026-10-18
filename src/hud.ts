@@ -6,6 +6,7 @@ type Ctx = CanvasRenderingContext2D;
 const FONT = '"Hiragino Maru Gothic ProN", "Hiragino Sans", "Noto Sans JP", sans-serif';
 
 export const drillButton = (H: number) => ({ x: W - 54, y: H - 62, r: 36 });
+export const muteButton = { x: W - 34, y: 106, r: 16 };
 
 function ellipse(ctx: Ctx, x: number, y: number, rx: number, ry: number, color: string): void {
   ctx.fillStyle = color;
@@ -78,7 +79,13 @@ function drawHud(ctx: Ctx, g: Game, H: number): void {
 }
 
 function drawOverlay(ctx: Ctx, g: Game, H: number): void {
-  ctx.fillStyle = 'rgba(20,30,50,0.55)';
+  // 柴が見えるよう、下に行くほど暗幕を薄くする
+  const shade = ctx.createLinearGradient(0, 0, 0, H);
+  shade.addColorStop(0, 'rgba(20,30,50,0.7)');
+  shade.addColorStop(0.55, 'rgba(20,30,50,0.55)');
+  shade.addColorStop(0.75, 'rgba(20,30,50,0.1)');
+  shade.addColorStop(1, 'rgba(20,30,50,0.35)');
+  ctx.fillStyle = shade;
   ctx.fillRect(0, 0, W, H);
   if (g.scene === 'title') {
     text(ctx, 'シバラン', W / 2, H * 0.16, 48, '#ffb35c');
@@ -95,7 +102,7 @@ function drawOverlay(ctx: Ctx, g: Game, H: number): void {
       `ささみ：ボーナス +${CFG.sasamiBonus}`,
       'シャワーは柴ドリルで弾け！',
     ];
-    lines.forEach((l, i) => text(ctx, l, W / 2, H * 0.3 + i * 25, 14, '#ffffff', 'center'));
+    lines.forEach((l, i) => text(ctx, l, W / 2, H * 0.28 + i * 23, 14, '#ffffff', 'center'));
     if (Math.floor(performance.now() / 500) % 2 === 0) text(ctx, 'タップでスタート', W / 2, H * 0.88, 22, '#ffffff');
   } else {
     text(ctx, 'つかまった…', W / 2, H * 0.22, 36, '#9fd8ff');
@@ -109,8 +116,37 @@ function drawOverlay(ctx: Ctx, g: Game, H: number): void {
   }
 }
 
+function drawMuteButton(ctx: Ctx, muted: boolean): void {
+  const b = muteButton;
+  ellipse(ctx, b.x, b.y, b.r, b.r, 'rgba(25,40,60,0.55)');
+  // スピーカーの形
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.moveTo(b.x - 8, b.y - 3);
+  ctx.lineTo(b.x - 4, b.y - 3);
+  ctx.lineTo(b.x + 1, b.y - 8);
+  ctx.lineTo(b.x + 1, b.y + 8);
+  ctx.lineTo(b.x - 4, b.y + 3);
+  ctx.lineTo(b.x - 8, b.y + 3);
+  ctx.fill();
+  ctx.strokeStyle = muted ? '#ff7b7b' : '#ffffff';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  if (muted) {
+    ctx.moveTo(b.x + 4, b.y - 4);
+    ctx.lineTo(b.x + 10, b.y + 4);
+    ctx.moveTo(b.x + 10, b.y - 4);
+    ctx.lineTo(b.x + 4, b.y + 4);
+  } else {
+    ctx.arc(b.x + 2, b.y, 5, -0.9, 0.9);
+    ctx.moveTo(b.x + 6.5, b.y - 7);
+    ctx.arc(b.x + 2, b.y, 9, -0.9, 0.9);
+  }
+  ctx.stroke();
+}
+
 /** project: ゲーム座標 (x, 高さ, y) → HUD の論理座標 */
-export function drawHudLayer(ctx: Ctx, g: Game, H: number, project: (x: number, h: number, y: number) => { x: number; y: number }): void {
+export function drawHudLayer(ctx: Ctx, g: Game, H: number, muted: boolean, project: (x: number, h: number, y: number) => { x: number; y: number }): void {
   ctx.clearRect(0, 0, W, H);
 
   // タオルで視界が遮られる
@@ -147,4 +183,5 @@ export function drawHudLayer(ctx: Ctx, g: Game, H: number, project: (x: number, 
 
   if (g.scene === 'playing') drawHud(ctx, g, H);
   else drawOverlay(ctx, g, H);
+  drawMuteButton(ctx, muted);
 }
